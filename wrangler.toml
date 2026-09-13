@@ -1,0 +1,31 @@
+name = "generative-ai-dashboard"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "public"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "genai-dashboard"
+# Paste your D1 id after `npm run d1:create`:
+database_id = "ce9fbb7d-9fc2-4894-9e8c-4581814e1caa"
+
+[[d1_databases]]
+binding = "HISTORY"
+database_name = "genai-history"
+database_id = "6a271502-ea90-411b-935c-50a16d5d5300"
+
+# Re-enable after R2 is enabled in dashboard (one click: dash.cloudflare.com → R2),
+# then: wrangler r2 bucket create genai-assets && wrangler deploy
+[[r2_buckets]]
+binding = "ASSETS_BUCKET"
+bucket_name = "genai-assets"
+
+[vars]
+MUAPI_APP_URL = "https://muapi-prompt-generator.workers.dev"
+REPLICATE_APP_URL = "https://replicate-prompt-orchestrator.workers.dev"
+RUNPOD_VOLUME_ID = "vz9pcezb40"
+RUNPOD_S3_ENDPOINT_DEFAULT = "https://s3api-us-nc-1.runpod.io"
+RUNPOD_S3_REGION_DEFAULT = "US-NC-1"

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Generative AI Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+<header class="border-b border-zinc-800 sticky top-0 bg-zinc-950/90 backdrop-blur z-10">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+    <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i>
+    <h1 class="font-bold">Generative AI Dashboard</h1>
+    <span id="healthBadge" class="ml-auto text-xs text-zinc-400">checking…</span>
+  </div>
+  <nav class="max-w-6xl mx-auto px-4 pb-3 flex gap-2 text-sm">
+    <button data-tab="projects" class="tabbtn">Projects</button>
+    <button data-tab="balances" class="tabbtn">Balances</button>
+    <button data-tab="mask" class="tabbtn">Mask painter</button>
+    <button data-tab="depth" class="tabbtn">Depth</button>
+    <button data-tab="storage" class="tabbtn">Storage</button>
+    <button data-tab="history" class="tabbtn">History</button>
+  </nav>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+  <section id="tab-projects" class="tab">
+    <h2 class="text-lg font-semibold mb-2">Projects</h2>
+    <p class="text-sm text-zinc-400 mb-4">Links to your prompt generators. Set URLs via <code>MUAPI_APP_URL</code> / <code>REPLICATE_APP_URL</code> vars.</p>
+    <div id="linksGrid" class="grid md:grid-cols-2 gap-3"></div>
+  </section>
+
+  <section id="tab-balances" class="tab hidden">
+    <div class="flex items-center gap-3 mb-2">
+      <h2 class="text-lg font-semibold">Balances</h2>
+      <button id="refreshBtn" class="btn text-sm"><i class="fa-solid fa-rotate"></i> Refresh live</button>
+      <span class="text-xs text-zinc-500">muapi + wavespeed + runpod live via Worker proxy. replicate/modal manual (no public API).</span>
+    </div>
+    <div id="balancesGrid" class="grid md:grid-cols-2 gap-3"></div>
+  </section>
+
+  <section id="tab-mask" class="tab hidden">
+    <h2 class="text-lg font-semibold mb-2">Image mask painter (inpainting)</h2>
+    <p class="text-sm text-zinc-400 mb-3">Upload an image, then paint <b>directly on it</b> — marked areas glow red. Export is a full-resolution PNG: <b>black = remove/inpaint, white = keep</b> (SD standard). Use <b>Invert</b> if your model expects the opposite.</p>
+    <div class="flex flex-wrap items-center gap-2 mb-3 text-sm">
+      <input id="maskFile" type="file" accept="image/*" class="text-sm" />
+      <button id="toolPaint" class="btn">Mark remove</button>
+      <button id="toolErase" class="btn">Erase</button>
+      <label>Brush <input id="brushSize" type="range" min="1" max="200" value="40" /> <span id="brushVal"></span></label>
+      <label>Overlay <input id="overlayOpacity" type="range" min="0" max="100" value="50" /></label>
+      <button id="viewOverlay" class="btn">Overlay</button>
+      <button id="viewMask" class="btn">Mask only</button>
+      <button id="undoStroke" class="btn">Undo</button>
+      <button id="invertMask" class="btn">Invert</button>
+      <button id="clearMask" class="btn">Clear</button>
+      <button id="downloadMask" class="btn">Download mask</button>
+      <button id="saveMaskR2" class="btn">Save mask to R2</button>
+    </div>
+    <div id="maskWrap" style="position:relative;display:inline-block;max-width:100%">
+      <canvas id="maskView" class="canvasbox" style="background:#09090b"></canvas>
+      <div id="brushRing" style="display:none;position:absolute;pointer-events:none;border:2px solid #34d399;border-radius:9999px;box-shadow:0 0 0 1px #000"></div>
+    </div>
+  </section>
+
+  <section id="tab-depth" class="tab hidden">
+    <h2 class="text-lg font-semibold mb-2">Depth mask (grayscale, lite)</h2>
+    <p class="text-sm text-zinc-400 mb-3">Runs <code>transformers.js depth-estimation</code> fully in your browser (free, no server). Image only for v1 — video frame sampling is phase 2.</p>
+    <div class="flex flex-wrap gap-2 mb-3 text-sm">
+      <input id="depthFile" type="file" accept="image/*" />
+      <button id="runDepth" class="btn"><i class="fa-solid fa-circle-play"></i> Run depth</button>
+      <label>Contrast <input id="depthContrast" type="range" min="50" max="200" value="100" /></label>
+      <button id="downloadDepth" class="btn">Download depth PNG</button>
+    </div>
+    <div class="grid md:grid-cols-2 gap-3">
+      <div><h3 class="text-sm mb-1">Source</h3><canvas id="depthSrc" class="canvasbox"></canvas></div>
+      <div><h3 class="text-sm mb-1">Depth</h3><canvas id="depthOut" class="canvasbox"></canvas></div>
+    </div>
+    <p id="depthStatus" class="text-xs text-zinc-500 mt-2"></p>
+  </section>
+
+  <section id="tab-storage" class="tab hidden">
+    <h2 class="text-lg font-semibold mb-2">Network storage (R2)</h2>
+    <p class="text-sm text-zinc-400 mb-3">Free tier: 10 GB, 1M writes + 10M reads/mo, zero egress. Pick many files, a whole folder, or drop them onto the zone below. Folder structure is preserved under the prefix.</p>
+    <div class="flex flex-wrap items-center gap-2 mb-3 text-sm">
+      <input id="storeFiles" type="file" multiple />
+      <label class="btn">Folder… <input id="storeDir" type="file" webkitdirectory style="display:none" /></label>
+      <input id="storePrefix" placeholder="uploads/" class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 w-48" />
+      <button id="uploadBtn" class="btn">Upload queued</button>
+      <button id="clearQueueBtn" class="btn">Clear queue</button>
+      <button id="listBtn" class="btn">List</button>
+    </div>
+    <div id="dropZone" class="card mb-3" style="border-style:dashed;text-align:center;padding:2rem;color:#a1a1aa">Drop files or folders here</div>
+    <div id="uploadQueue" class="text-sm mb-3"></div>
+    <div id="storageList" class="text-sm"></div>
+  </section>
+
+  <section id="tab-history" class="tab hidden">
+    <h2 class="text-lg font-semibold mb-2">Generation history (shared)</h2>
+    <p class="text-sm text-zinc-400 mb-3">Every logged run from all frontends. Rate outputs 1–5 — top-rated prompts become few-shot examples for the Phase 2 enhancer templates.</p>
+    <div id="histStats" class="text-sm text-zinc-400 mb-3">loading stats…</div>
+    <div class="flex flex-wrap items-center gap-2 mb-3 text-sm">
+      <select id="histProvider" class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1">
+        <option value="">all providers</option><option value="muapi">muapi</option><option value="replicate">replicate</option>
+      </select>
+      <input id="histModel" placeholder="model contains…" class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 w-48" />
+      <select id="histStatus" class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1">
+        <option value="">any status</option><option value="succeeded">succeeded</option><option value="completed">completed</option><option value="failed">failed</option>
+      </select>
+      <select id="histMinRating" class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1">
+        <option value="">any rating</option><option value="unrated">unrated only</option><option value="5">★★★★★</option><option value="4">★★★★+</option><option value="3">★★★+</option>
+      </select>
+      <select id="histOrder" class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1">
+        <option value="newest">newest</option><option value="top">top rated</option>
+      </select>
+      <button id="histSearchBtn" class="btn">Search</button>
+    </div>
+    <div id="histGrid" class="grid md:grid-cols-2 gap-3"></div>
+  </section>
+</main>
+
+<script src="./app.js"></script>
+<script src="./mask.js"></script>
+<script src="./depth.js"></script>
+</body>
+</html>

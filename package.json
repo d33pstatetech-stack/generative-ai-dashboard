@@ -1,0 +1,19 @@
+{
+  "name": "generative-ai-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "d1:create": "wrangler d1 create genai-dashboard",
+    "d1:migrate:local": "wrangler d1 execute genai-dashboard --local --file=migrations/0001_init.sql",
+    "d1:migrate:remote": "wrangler d1 execute genai-dashboard --remote --file=migrations/0001_init.sql",
+    "setup:local": "npm run d1:migrate:local",
+    "setup:remote": "npm run d1:migrate:remote",
+    "r2:create": "wrangler r2 bucket create genai-assets"
+  },
+  "devDependencies": {
+    "wrangler": "^3.60.0"
+  }
+}

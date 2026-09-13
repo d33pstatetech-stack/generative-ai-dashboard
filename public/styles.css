@@ -1,0 +1,11 @@
+.tabbtn{padding:.4rem .8rem;border:1px solid #3f3f46;border-radius:.5rem;background:#18181b}
+.tabbtn.active{background:#059669;border-color:#059669;color:#fff}
+.btn{padding:.4rem .8rem;border:1px solid #3f3f46;border-radius:.5rem;background:#18181b}
+.btn:hover{border-color:#059669}
+.canvasbox{width:100%;background:#09090b;border:1px solid #3f3f46;border-radius:.5rem;max-height:60vh}
+.card{background:#18181b;border:1px solid #27272a;border-radius:.75rem;padding:1rem}
+.badge{font-size:.65rem;padding:.1rem .45rem;border-radius:999px;border:1px solid #3f3f46}
+.badge.live{color:#6ee7b7;border-color:#059669}
+.badge.manual{color:#fcd34d;border-color:#d97706}
+.badge.error{color:#fca5a5;border-color:#dc2626}
+code{background:#27272a;padding:0 .3rem;border-radius:.3rem}
