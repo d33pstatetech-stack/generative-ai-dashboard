@@ -18,6 +18,8 @@ code{background:#27272a;padding:0 .3rem;border-radius:.3rem}
 .store-meta{padding:.35rem .5rem;font-size:.72rem}
 .thumb-ph{animation:thumbpulse 1.4s ease-in-out infinite}
 @keyframes thumbpulse{0%,100%{opacity:.45}50%{opacity:.95}}
+.vfail{font-size:.62rem;color:#fca5a5;margin-top:.15rem}
+.verror{color:#fca5a5;padding:1rem;font-size:.85rem;text-align:center}
 .store-row{display:flex;align-items:center;gap:.5rem;padding:.3rem .4rem;border-bottom:1px solid #27272a;cursor:default}
 .store-row:hover{background:#18181b}
 .viewer-modal{position:fixed;inset:0;z-index:50}

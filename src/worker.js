@@ -200,11 +200,14 @@ function links(env) {
   ];
 }
 
+const BUILD_VERSION = '2026-09-14-diag.1';
+
 async function handleApiRoute(request, env, path, url) {
   if (path === '/api/health' && request.method === 'GET') {
     return jsonResponse({
       ok: true,
       time: new Date().toISOString(),
+      version: BUILD_VERSION,
       bindings: { db: !!env.DB, r2: !!env.ASSETS_BUCKET },
       providers: PROVIDERS,
     });

@@ -22,7 +22,7 @@ async function api(path, opts = {}) {
 (async () => {
   try {
     const h = await api('/api/health');
-    $('#healthBadge').textContent = 'worker ok · db:' + (h.bindings.db ? 'yes' : 'no') + ' r2:' + (h.bindings.r2 ? 'yes' : 'no');
+    $('#healthBadge').textContent = 'worker ok · ' + (h.version || '?') + ' · db:' + (h.bindings.db ? 'yes' : 'no') + ' r2:' + (h.bindings.r2 ? 'yes' : 'no');
   } catch (e) { $('#healthBadge').textContent = String(e.message); }
   try {
     const { links } = await api('/api/links');
@@ -159,14 +159,18 @@ function observeThumbs(root) {
 function captureVideoPoster(url, timeoutMs) {
   return new Promise((resolve) => {
     let done = false;
-    const finish = (dataUrl, duration) => {
+    // err: null on success, 'timeout' on stall, or 'media-err-N' (1 aborted,
+    // 2 network, 3 decode, 4 src-not-supported) straight from the browser.
+    const finish = (dataUrl, duration, err) => {
       if (done) return; done = true;
       try { v.removeAttribute('src'); v.load(); } catch {}
-      resolve({ dataUrl: dataUrl || null, duration });
+      resolve({ dataUrl: dataUrl || null, duration, err: err || null });
     };
     const v = document.createElement('video');
-    v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
-    const to = setTimeout(() => finish(null, v.duration), timeoutMs || 12000);
+    // preload=metadata: fetch head + tail (moov) only, not the whole mdat.
+    // The open-ended first range would otherwise pull the entire file.
+    v.muted = true; v.playsInline = true; v.preload = 'metadata'; v.src = url;
+    const to = setTimeout(() => finish(null, v.duration, 'timeout'), timeoutMs || 12000);
     const grab = () => {
       if (done) return;
       clearTimeout(to);
@@ -194,7 +198,7 @@ function captureVideoPoster(url, timeoutMs) {
         } else grab();
       } catch { grab(); }
     }, { once: true });
-    v.addEventListener('error', () => { clearTimeout(to); finish(null, NaN); }, { once: true });
+    v.addEventListener('error', () => { clearTimeout(to); finish(null, NaN, 'media-err-' + (v.error ? v.error.code : '?')); }, { once: true });
   });
 }
 function loadThumb(el) {
@@ -232,6 +236,13 @@ function loadThumb(el) {
         ph.replaceWith(img);
       } else if (ph) {
         ph.classList.remove('thumb-ph'); // keep the 🎬 icon, stop pulsing
+        ph.setAttribute('title', 'No preview: ' + (r.err || 'no-frame'));
+        if (r.err) {
+          const b = document.createElement('div');
+          b.className = 'vfail';
+          b.textContent = r.err;
+          ph.appendChild(b);
+        }
       }
       if (Number.isFinite(r.duration) && r.duration > 0) {
         const meta = card.querySelector('.vmeta');
@@ -423,6 +434,15 @@ function renderViewer() {
   });
   m.addEventListener('play', () => { $('#vPlay').textContent = '⏸'; });
   m.addEventListener('pause', () => { $('#vPlay').textContent = '▶'; });
+  m.addEventListener('error', () => {
+    const code = m.error ? m.error.code : '?';
+    const names = { 1: 'aborted', 2: 'network', 3: 'decode', 4: 'not-supported' };
+    const d = document.createElement('div');
+    d.className = 'verror';
+    d.innerHTML = 'Failed to load (error ' + code + ': ' + (names[code] || '?') + '). ' +
+      '<a class="underline" href="' + u + '" target="_blank" rel="noopener">Open original in new tab</a>';
+    stage.appendChild(d);
+  });
   m.addEventListener('ended', () => {
     if (m.loop || viewerState.files.length < 2) return;
     viewerStep(1);
