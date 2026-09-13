@@ -22,6 +22,7 @@ database_id = "6a271502-ea90-411b-935c-50a16d5d5300"
 [[r2_buckets]]
 binding = "ASSETS_BUCKET"
 bucket_name = "genai-assets"
+preview_bucket_name = "genai-assets"
 
 [vars]
 MUAPI_APP_URL = "https://muapi-prompt-generator.workers.dev"

@@ -83,16 +83,225 @@ async function loadBalances(refresh) {
 }
 $('#refreshBtn').addEventListener('click', () => loadBalances(true));
 
-// Storage browser
-$('#listBtn').addEventListener('click', async () => {
+// Storage explorer: folder navigation, list/grid views, type filter,
+// thumbnails, and a viewer modal with video controls (speed, slow-mo, frame step).
+const storeState = { prefix: '', view: 'grid', filter: 'all', folders: [], objects: [], loading: false };
+const STORE_IMG = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'svg', 'bmp'];
+const STORE_VID = ['mp4', 'webm', 'mov', 'm4v'];
+const STORE_AUD = ['mp3', 'wav', 'ogg', 'm4a', 'flac'];
+function storeKind(key) {
+  const m = String(key || '').toLowerCase().match(/\.([a-z0-9]{2,5})$/);
+  const e = m ? m[1] : '';
+  if (STORE_IMG.indexOf(e) >= 0) return 'image';
+  if (STORE_VID.indexOf(e) >= 0) return 'video';
+  if (STORE_AUD.indexOf(e) >= 0) return 'audio';
+  return 'other';
+}
+function storeUrl(key) { return '/api/storage/download?key=' + encodeURIComponent(key); }
+function storeName(key) { const p = String(key || '').split('/'); return p[p.length - 1] || key; }
+function fmtSize(b) {
+  b = Number(b || 0);
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1024 * 1024 * 1024) return (b / 1048576).toFixed(1) + ' MB';
+  return (b / 1073741824).toFixed(2) + ' GB';
+}
+function fmtTime(s) {
+  if (!Number.isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return m + ':' + String(sec).padStart(2, '0');
+}
+async function loadStore() {
   const box = $('#storageList');
+  storeState.loading = true;
   try {
-    const j = await api('/api/storage/list');
+    const j = await api('/api/storage/list?prefix=' + encodeURIComponent(storeState.prefix) + '&delimiter=/');
     if (!j.configured) { box.textContent = 'R2 not configured: ' + j.hint; return; }
-    box.innerHTML = (j.objects || []).map((o) =>
-      '<div><a class="underline" href="/api/storage/download?key=' + encodeURIComponent(o.key) + '" target="_blank">' + o.key + '</a> <span class="text-zinc-500">(' + o.size + 'b)</span></div>'
-    ).join('') || 'empty';
+    storeState.folders = j.folders || [];
+    storeState.objects = j.objects || [];
+    if (j.truncated) box.dataset.note = ' (list truncated at 100 — narrow the prefix)';
+    renderStore();
   } catch (e) { box.textContent = String(e.message); }
+  finally { storeState.loading = false; }
+}
+function renderStore() {
+  const box = $('#storageList');
+  const st = storeState;
+  // Breadcrumb
+  const segs = st.prefix.split('/').filter(Boolean);
+  let crumbs = '<button class="vbtn" data-crumb="">root</button>';
+  let acc = '';
+  segs.forEach((s) => {
+    acc += s + '/';
+    crumbs += ' / <button class="vbtn" data-crumb="' + esc(acc) + '">' + esc(s) + '</button>';
+  });
+  $('#storeCrumbs').innerHTML = crumbs;
+  $('#storeViewList').style.borderColor = st.view === 'list' ? '#059669' : '';
+  $('#storeViewGrid').style.borderColor = st.view === 'grid' ? '#059669' : '';
+  // Apply type filter
+  const files = st.objects.filter((o) => st.filter === 'all' || storeKind(o.key) === st.filter);
+  const folders = st.filter === 'all' ? st.folders : [];
+  let html = '';
+  if (st.view === 'grid') {
+    html += '<div class="store-grid">';
+    folders.forEach((f) => {
+      html += '<div class="store-card" data-folder="' + esc(f) + '"><div class="store-folder">📁</div>' +
+        '<div class="store-meta"><div class="truncate">' + esc(storeName(f.slice(0, -1))) + '/</div></div></div>';
+    });
+    files.forEach((o) => {
+      const kind = storeKind(o.key), u = storeUrl(o.key), nm = storeName(o.key);
+      let thumb;
+      if (kind === 'image') thumb = '<img class="store-thumb" loading="lazy" src="' + u + '" alt="" />';
+      else if (kind === 'video') thumb = '<video class="store-thumb" preload="metadata" muted playsinline src="' + u + '"></video>';
+      else if (kind === 'audio') thumb = '<div class="store-folder">🎵</div>';
+      else thumb = '<div class="store-folder">📄</div>';
+      html += '<div class="store-card" data-key="' + esc(o.key) + '">' + thumb +
+        '<div class="store-meta"><div class="truncate" title="' + esc(o.key) + '">' + esc(nm) + '</div>' +
+        '<div class="text-zinc-500">' + fmtSize(o.size) + '</div></div></div>';
+    });
+    html += '</div>';
+  } else {
+    folders.forEach((f) => {
+      html += '<div class="store-row" data-folder="' + esc(f) + '"><span>📁</span><span class="underline"> ' + esc(f) + '</span></div>';
+    });
+    files.forEach((o) => {
+      const kind = storeKind(o.key);
+      const icon = kind === 'image' ? '🖼️' : kind === 'video' ? '🎬' : kind === 'audio' ? '🎵' : '📄';
+      html += '<div class="store-row"><span>' + icon + '</span>' +
+        '<a class="underline truncate" href="' + storeUrl(o.key) + '" target="_blank" rel="noopener" style="max-width:60%">' + esc(o.key) + '</a>' +
+        '<span class="text-zinc-500">(' + fmtSize(o.size) + ')</span>';
+      if (kind !== 'other') html += ' <button class="vbtn" data-key="' + esc(o.key) + '">View</button>';
+      html += '</div>';
+    });
+  }
+  if (!folders.length && !files.length) html += '<div class="text-zinc-500">empty folder</div>';
+  if (box.dataset.note) { html += '<div class="text-zinc-500 text-xs mt-2">' + esc(box.dataset.note) + '</div>'; delete box.dataset.note; }
+  box.innerHTML = html;
+}
+$('#listBtn').addEventListener('click', loadStore);
+$('#storeViewList').addEventListener('click', () => { storeState.view = 'list'; renderStore(); });
+$('#storeViewGrid').addEventListener('click', () => { storeState.view = 'grid'; renderStore(); });
+$('#storeFilter').addEventListener('change', (e) => { storeState.filter = e.target.value; renderStore(); });
+$('#storageList').addEventListener('click', (e) => {
+  const f = e.target.closest('[data-folder]');
+  if (f) { storeState.prefix = f.dataset.folder; loadStore(); return; }
+  const c = e.target.closest('[data-key]');
+  if (c && storeKind(c.dataset.key) !== 'other') { openViewer(c.dataset.key); return; }
+});
+$('#storeCrumbs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-crumb]');
+  if (!b) return;
+  storeState.prefix = b.dataset.crumb;
+  loadStore();
+});
+
+// Viewer modal: images full-size; video/audio with custom controls
+// (play, seek, volume, speed select, slow-mo toggle, frame step, loop, fullscreen).
+const viewerState = { files: [], idx: 0 };
+function viewerMediaFiles() {
+  return storeState.objects.filter((o) => storeKind(o.key) !== 'other');
+}
+function openViewer(key) {
+  const files = viewerMediaFiles();
+  let i = files.findIndex((o) => o.key === key);
+  if (i < 0) i = 0;
+  viewerState.files = files;
+  viewerState.idx = i;
+  $('#viewerModal').classList.remove('hidden');
+  renderViewer();
+}
+function closeViewer() {
+  $('#viewerModal').classList.add('hidden');
+  $('#viewerStage').innerHTML = '';
+  $('#viewerControls').innerHTML = '';
+  viewerState.files = [];
+}
+function viewerStep(d) {
+  if (!viewerState.files.length) return;
+  viewerState.idx = (viewerState.idx + d + viewerState.files.length) % viewerState.files.length;
+  renderViewer();
+}
+function renderViewer() {
+  const f = viewerState.files[viewerState.idx];
+  if (!f) { closeViewer(); return; }
+  const kind = storeKind(f.key), u = storeUrl(f.key);
+  $('#viewerTitle').textContent = f.key + '  (' + (viewerState.idx + 1) + '/' + viewerState.files.length + ', ' + fmtSize(f.size) + ')';
+  $('#viewerOpen').href = u;
+  const stage = $('#viewerStage'), ctrl = $('#viewerControls');
+  if (kind === 'image') {
+    stage.innerHTML = '<img src="' + u + '" alt="" />';
+    ctrl.innerHTML = '<a class="vbtn" href="' + u + '" download="' + esc(storeName(f.key)) + '">Download</a>';
+    return;
+  }
+  const tag = kind === 'video' ? 'video' : 'audio';
+  stage.innerHTML = '<' + tag + ' id="viewerMedia" src="' + u + '" preload="metadata" playsinline' +
+    (kind === 'video' ? '' : ' controls style="width:100%"') + '></' + tag + '>';
+  const m = $('#viewerMedia');
+  const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+  ctrl.innerHTML =
+    '<button class="vbtn" id="vPlay">▶</button>' +
+    '<span id="vTime">0:00 / 0:00</span>' +
+    '<input type="range" id="vSeek" class="vseek" min="0" max="1000" value="0" />' +
+    '<button class="vbtn" id="vBack" title="Back 1 frame">|‹</button>' +
+    '<button class="vbtn" id="vFwd" title="Forward 1 frame">›|</button>' +
+    '<button class="vbtn" id="vSlow" title="Toggle slow motion (0.25×)">🐢 Slow</button>' +
+    '<select id="vSpeed" class="vselect" title="Playback speed">' +
+    speeds.map((s) => '<option value="' + s + '"' + (s === 1 ? ' selected' : '') + '>' + s + '×</option>').join('') +
+    '</select>' +
+    '<input type="range" id="vVol" min="0" max="100" value="100" style="width:70px" title="Volume" />' +
+    '<button class="vbtn" id="vLoop" title="Loop">🔁</button>' +
+    (kind === 'video' ? '<button class="vbtn" id="vFull" title="Fullscreen">⛶</button>' : '') +
+    '<a class="vbtn" href="' + u + '" download="' + esc(storeName(f.key)) + '">Download</a>';
+  let prevSpeed = 1;
+  const t = $('#vTime'), seek = $('#vSeek');
+  m.addEventListener('loadedmetadata', () => { t.textContent = '0:00 / ' + fmtTime(m.duration); });
+  m.addEventListener('timeupdate', () => {
+    t.textContent = fmtTime(m.currentTime) + ' / ' + fmtTime(m.duration);
+    if (Number.isFinite(m.duration) && m.duration > 0 && document.activeElement !== seek) {
+      seek.value = Math.round((m.currentTime / m.duration) * 1000);
+    }
+  });
+  m.addEventListener('play', () => { $('#vPlay').textContent = '⏸'; });
+  m.addEventListener('pause', () => { $('#vPlay').textContent = '▶'; });
+  $('#vPlay').addEventListener('click', () => { if (m.paused) m.play().catch(() => {}); else m.pause(); });
+  seek.addEventListener('input', () => {
+    if (Number.isFinite(m.duration) && m.duration > 0) m.currentTime = (seek.value / 1000) * m.duration;
+  });
+  $('#vSpeed').addEventListener('change', (e) => {
+    m.playbackRate = parseFloat(e.target.value) || 1;
+    $('#vSlow').classList.toggle('on', m.playbackRate === 0.25);
+  });
+  $('#vSlow').addEventListener('click', () => {
+    if (m.playbackRate === 0.25) { m.playbackRate = prevSpeed === 0.25 ? 1 : prevSpeed; }
+    else { prevSpeed = m.playbackRate; m.playbackRate = 0.25; }
+    $('#vSpeed').value = String(m.playbackRate);
+    $('#vSlow').classList.toggle('on', m.playbackRate === 0.25);
+  });
+  const stepFrame = (d) => { m.pause(); if (Number.isFinite(m.duration)) m.currentTime = Math.min(Math.max(0, m.currentTime + d / 30), m.duration || 0); };
+  $('#vBack').addEventListener('click', () => stepFrame(-1));
+  $('#vFwd').addEventListener('click', () => stepFrame(1));
+  $('#vVol').addEventListener('input', (e) => { m.volume = (parseInt(e.target.value, 10) || 0) / 100; m.muted = false; });
+  $('#vLoop').addEventListener('click', (e) => { m.loop = !m.loop; e.target.classList.toggle('on', m.loop); });
+  const full = $('#vFull');
+  if (full) full.addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else if (m.requestFullscreen) m.requestFullscreen().catch(() => {});
+    else if (m.webkitEnterFullscreen) m.webkitEnterFullscreen();
+  });
+}
+$('#viewerClose').addEventListener('click', closeViewer);
+$('#viewerBackdrop').addEventListener('click', closeViewer);
+$('#viewerPrev').addEventListener('click', () => viewerStep(-1));
+$('#viewerNext').addEventListener('click', () => viewerStep(1));
+document.addEventListener('keydown', (e) => {
+  if ($('#viewerModal').classList.contains('hidden')) return;
+  if (e.key === 'Escape') closeViewer();
+  else if (e.key === 'ArrowLeft') viewerStep(-1);
+  else if (e.key === 'ArrowRight') viewerStep(1);
+  else if (e.key === ' ') {
+    const m = $('#viewerMedia');
+    if (m && (e.target === document.body || e.target === m)) { e.preventDefault(); if (m.paused) m.play().catch(() => {}); else m.pause(); }
+  }
 });
 
 // Storage browser + batch uploader (multi-file, folder, drag-drop).

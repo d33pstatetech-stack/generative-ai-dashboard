@@ -89,12 +89,41 @@
       <input id="storePrefix" placeholder="uploads/" class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 w-48" />
       <button id="uploadBtn" class="btn">Upload queued</button>
       <button id="clearQueueBtn" class="btn">Clear queue</button>
-      <button id="listBtn" class="btn">List</button>
     </div>
     <div id="dropZone" class="card mb-3" style="border-style:dashed;text-align:center;padding:2rem;color:#a1a1aa">Drop files or folders here</div>
     <div id="uploadQueue" class="text-sm mb-3"></div>
+    <div class="flex flex-wrap items-center gap-2 mb-2 text-sm">
+      <div id="storeCrumbs" class="flex items-center gap-1 text-sm"></div>
+      <span class="flex-1"></span>
+      <select id="storeFilter" class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1">
+        <option value="all">All files</option>
+        <option value="image">Images</option>
+        <option value="video">Videos</option>
+        <option value="audio">Audio</option>
+        <option value="other">Other</option>
+      </select>
+      <button id="storeViewList" class="btn" title="List view">☰</button>
+      <button id="storeViewGrid" class="btn" title="Grid view with thumbnails">▦</button>
+      <button id="listBtn" class="btn">Refresh</button>
+    </div>
     <div id="storageList" class="text-sm"></div>
   </section>
+
+  <div id="viewerModal" class="viewer-modal hidden">
+    <div class="viewer-backdrop" id="viewerBackdrop"></div>
+    <div class="viewer-box">
+      <div class="viewer-top">
+        <span id="viewerTitle" class="truncate text-sm"></span>
+        <span class="flex-1"></span>
+        <button id="viewerPrev" class="btn" title="Previous (←)">‹</button>
+        <button id="viewerNext" class="btn" title="Next (→)">›</button>
+        <a id="viewerOpen" class="btn" target="_blank" rel="noopener" title="Open original in new tab">⧉</a>
+        <button id="viewerClose" class="btn" title="Close (Esc)">✕</button>
+      </div>
+      <div class="viewer-stage" id="viewerStage"></div>
+      <div class="viewer-controls" id="viewerControls"></div>
+    </div>
+  </div>
 
   <section id="tab-history" class="tab hidden">
     <h2 class="text-lg font-semibold mb-2">Generation history (shared)</h2>

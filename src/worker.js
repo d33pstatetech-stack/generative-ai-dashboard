@@ -41,6 +41,20 @@ function jsonResponse(obj, status = 200, extra = {}) {
 
 function histDB(env) { return env.HISTORY || null; }
 
+// Extension → content-type fallback for objects stored before the uploader
+// set proper httpMetadata (or stored as application/octet-stream).
+const EXT_CONTENT_TYPES = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  gif: 'image/gif', avif: 'image/avif', svg: 'image/svg+xml', bmp: 'image/bmp',
+  mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', m4v: 'video/x-m4v',
+  mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4', flac: 'audio/flac',
+};
+function guessContentType(key, stored) {
+  if (stored && stored !== 'application/octet-stream') return stored;
+  const m = String(key || '').split('?')[0].match(/\.([a-z0-9]{2,5})$/i);
+  return (m && EXT_CONTENT_TYPES[m[1].toLowerCase()]) || stored || 'application/octet-stream';
+}
+
 async function readCache(env, provider) {
   try {
     if (!env.DB) return null;
@@ -230,9 +244,12 @@ async function handleApiRoute(request, env, path, url) {
   if (path === '/api/storage/list' && request.method === 'GET') {
     if (!env.ASSETS_BUCKET) return jsonResponse({ configured: false, hint: 'Create R2 bucket genai-assets and bind ASSETS_BUCKET' });
     const prefix = url.searchParams.get('prefix') || '';
-    const listed = await env.ASSETS_BUCKET.list({ prefix, limit: 100 });
+    const delimiter = url.searchParams.get('delimiter') || '/';
+    const listed = await env.ASSETS_BUCKET.list({ prefix, delimiter, limit: 100 });
     return jsonResponse({
       configured: true,
+      prefix,
+      folders: listed.delimitedPrefixes || [],
       objects: (listed.objects || []).map((o) => ({ key: o.key, size: o.size, uploaded: o.uploaded })),
       truncated: !!listed.truncated,
     });
@@ -254,7 +271,38 @@ async function handleApiRoute(request, env, path, url) {
     if (!key) return jsonResponse({ error: 'key required' }, 400);
     const obj = await env.ASSETS_BUCKET.get(key);
     if (!obj) return jsonResponse({ error: 'not found' }, 404);
-    const headers = { 'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream' };
+    const ct = guessContentType(key, obj.httpMetadata?.contentType);
+    // Range support so <video>/<audio> can seek without downloading everything.
+    const range = request.headers.get('range');
+    if (range) {
+      const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+      if (m) {
+        const size = obj.size;
+        let start = m[1] === '' ? null : parseInt(m[1], 10);
+        let end = m[2] === '' ? null : parseInt(m[2], 10);
+        if (start === null && end !== null) { start = Math.max(0, size - end); end = size - 1; }
+        else if (start !== null && end === null) { end = size - 1; }
+        if (start !== null && end !== null && Number.isFinite(start) && Number.isFinite(end) && start <= end && start < size) {
+          end = Math.min(end, size - 1);
+          const ranged = await env.ASSETS_BUCKET.get(key, { range: { offset: start, length: end - start + 1 } });
+          if (ranged) {
+            return new Response(ranged.body, {
+              status: 206,
+              headers: {
+                'Content-Type': ct, 'Accept-Ranges': 'bytes',
+                'Content-Range': 'bytes ' + start + '-' + end + '/' + size,
+                'Content-Length': String(end - start + 1),
+              },
+            });
+          }
+        } else {
+          return new Response('Requested Range Not Satisfiable', {
+            status: 416, headers: { 'Content-Range': 'bytes */' + obj.size },
+          });
+        }
+      }
+    }
+    const headers = { 'Content-Type': ct, 'Accept-Ranges': 'bytes', 'Content-Length': String(obj.size) };
     return new Response(obj.body, { headers });
   }
   // ─── Shared history browser (reads genai-history; writes only ratings) ───

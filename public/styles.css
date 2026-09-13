@@ -9,3 +9,26 @@
 .badge.manual{color:#fcd34d;border-color:#d97706}
 .badge.error{color:#fca5a5;border-color:#dc2626}
 code{background:#27272a;padding:0 .3rem;border-radius:.3rem}
+/* Storage explorer */
+.store-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.6rem}
+.store-card{background:#18181b;border:1px solid #27272a;border-radius:.6rem;overflow:hidden;cursor:pointer}
+.store-card:hover{border-color:#059669}
+.store-thumb{width:100%;height:110px;object-fit:cover;display:block;background:#09090b}
+.store-folder{display:flex;align-items:center;justify-content:center;height:110px;font-size:2rem;background:#09090b}
+.store-meta{padding:.35rem .5rem;font-size:.72rem}
+.store-row{display:flex;align-items:center;gap:.5rem;padding:.3rem .4rem;border-bottom:1px solid #27272a;cursor:default}
+.store-row:hover{background:#18181b}
+.viewer-modal{position:fixed;inset:0;z-index:50}
+.viewer-modal.hidden{display:none}
+.viewer-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.82)}
+.viewer-box{position:relative;max-width:min(1100px,94vw);max-height:92vh;margin:4vh auto;background:#111114;border:1px solid #3f3f46;border-radius:.75rem;display:flex;flex-direction:column;overflow:hidden}
+.viewer-top{display:flex;align-items:center;gap:.4rem;padding:.5rem .6rem;border-bottom:1px solid #27272a}
+.viewer-stage{display:flex;align-items:center;justify-content:center;background:#000;min-height:30vh;max-height:66vh;overflow:auto}
+.viewer-stage img,.viewer-stage video{max-width:100%;max-height:66vh}
+.viewer-controls{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;padding:.5rem .6rem;border-top:1px solid #27272a;font-size:.8rem}
+.viewer-controls input[type=range]{accent-color:#059669}
+.vseek{flex:1;min-width:120px}
+.vbtn{padding:.25rem .55rem;border:1px solid #3f3f46;border-radius:.4rem;background:#18181b;cursor:pointer}
+.vbtn:hover{border-color:#059669}
+.vbtn.on{background:#059669;border-color:#059669;color:#fff}
+.vselect{background:#18181b;border:1px solid #3f3f46;border-radius:.4rem;padding:.2rem .3rem;color:inherit}
