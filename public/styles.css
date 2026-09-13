@@ -16,6 +16,8 @@ code{background:#27272a;padding:0 .3rem;border-radius:.3rem}
 .store-thumb{width:100%;height:110px;object-fit:cover;display:block;background:#09090b}
 .store-folder{display:flex;align-items:center;justify-content:center;height:110px;font-size:2rem;background:#09090b}
 .store-meta{padding:.35rem .5rem;font-size:.72rem}
+.thumb-ph{animation:thumbpulse 1.4s ease-in-out infinite}
+@keyframes thumbpulse{0%,100%{opacity:.45}50%{opacity:.95}}
 .store-row{display:flex;align-items:center;gap:.5rem;padding:.3rem .4rem;border-bottom:1px solid #27272a;cursor:default}
 .store-row:hover{background:#18181b}
 .viewer-modal{position:fixed;inset:0;z-index:50}

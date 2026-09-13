@@ -85,7 +85,8 @@ $('#refreshBtn').addEventListener('click', () => loadBalances(true));
 
 // Storage explorer: folder navigation, list/grid views, type filter,
 // thumbnails, and a viewer modal with video controls (speed, slow-mo, frame step).
-const storeState = { prefix: '', view: 'grid', filter: 'all', flat: false, folders: [], objects: [], cursor: null, truncated: false, loading: false };
+const storeState = { prefix: '', view: 'grid', filter: 'all', flat: false, folders: [], objects: [], cursor: null, truncated: false, renderLimit: 60, loading: false };
+const STORE_PAGE = 60;
 const STORE_IMG = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'svg', 'bmp'];
 const STORE_VID = ['mp4', 'webm', 'mov', 'm4v'];
 const STORE_AUD = ['mp3', 'wav', 'ogg', 'm4a', 'flac'];
@@ -126,9 +127,119 @@ async function loadStore(more) {
     st.objects = more ? st.objects.concat(j.objects || []) : (j.objects || []);
     st.truncated = !!j.truncated;
     st.cursor = j.cursor || null;
+    if (!more) st.renderLimit = STORE_PAGE;
     renderStore();
   } catch (e) { box.textContent = String(e.message); }
   finally { st.loading = false; }
+}
+// Lazy thumbnails: placeholders swap in only when scrolled near the viewport.
+// At most 4 video captures run at once so the browser never self-DDoSes.
+const thumbObserver = ('IntersectionObserver' in window) ? new IntersectionObserver((ents) => {
+  for (const en of ents) {
+    if (en.isIntersecting) { thumbObserver.unobserve(en.target); loadThumb(en.target); }
+  }
+}, { rootMargin: '500px' }) : null;
+const thumbQueue = [];
+let thumbActive = 0;
+function pumpThumbs() {
+  while (thumbActive < 4 && thumbQueue.length) {
+    const job = thumbQueue.shift();
+    thumbActive++;
+    try { job().catch(() => {}).finally(() => { thumbActive--; pumpThumbs(); }); }
+    catch { thumbActive--; }
+  }
+}
+function observeThumbs(root) {
+  const els = (root || document).querySelectorAll('[data-thumb]:not([data-done])');
+  if (!thumbObserver) { els.forEach(loadThumb); return; }
+  els.forEach((el) => thumbObserver.observe(el));
+}
+// Capture one poster frame from a video without keeping a <video> mounted:
+// temp element → first frame (or ~0.5s in) → JPEG data URL → element released.
+function captureVideoPoster(url, timeoutMs) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (dataUrl, duration) => {
+      if (done) return; done = true;
+      try { v.removeAttribute('src'); v.load(); } catch {}
+      resolve({ dataUrl: dataUrl || null, duration });
+    };
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+    const to = setTimeout(() => finish(null, v.duration), timeoutMs || 12000);
+    const grab = () => {
+      if (done) return;
+      clearTimeout(to);
+      let dataUrl = null;
+      try {
+        const w = v.videoWidth, h = v.videoHeight;
+        if (w && h) {
+          const scale = Math.min(1, 320 / w);
+          const c = document.createElement('canvas');
+          c.width = Math.max(2, Math.round(w * scale));
+          c.height = Math.max(2, Math.round(h * scale));
+          c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+          dataUrl = c.toDataURL('image/jpeg', 0.7);
+        }
+      } catch {}
+      finish(dataUrl, v.duration);
+    };
+    v.addEventListener('loadeddata', () => {
+      try {
+        const t = (Number.isFinite(v.duration) && v.duration > 1) ? Math.min(0.5, v.duration / 3) : 0;
+        if (t > 0.05) {
+          v.addEventListener('seeked', grab, { once: true });
+          try { v.currentTime = t; } catch { grab(); }
+          setTimeout(grab, 5000); // seek fallback — grab whatever frame we have
+        } else grab();
+      } catch { grab(); }
+    }, { once: true });
+    v.addEventListener('error', () => { clearTimeout(to); finish(null, NaN); }, { once: true });
+  });
+}
+function loadThumb(el) {
+  if (!el || el.dataset.done) return;
+  el.dataset.done = '1';
+  const card = el.closest('[data-kind]');
+  const kind = card ? card.dataset.kind : '';
+  const key = card ? card.dataset.key : '';
+  if (!key) return;
+  if (kind === 'image') {
+    if (el.tagName === 'IMG') {
+      el.addEventListener('error', () => { el.classList.remove('thumb-ph'); }, { once: true });
+      el.addEventListener('load', () => { el.classList.remove('thumb-ph'); }, { once: true });
+      el.src = el.dataset.src;
+    }
+    return;
+  }
+  if (kind === 'video') {
+    thumbQueue.push(async () => {
+      const r = await captureVideoPoster(storeUrl(key), 12000);
+      // Playlist thumbs carry data-key themselves; grid thumbs live inside the card.
+      const ph = (card === el) ? el : (card ? card.querySelector('[data-thumb]') : null);
+      if (r.dataUrl && ph) {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.src = r.dataUrl;
+        img.className = ph.hasAttribute('data-pl')
+          ? ('pl-thumb' + (ph.className.indexOf('active') >= 0 ? ' active' : ''))
+          : 'store-thumb';
+        if (ph.hasAttribute('data-pl')) {
+          const pl = ph.getAttribute('data-pl'), ti = ph.getAttribute('title');
+          if (pl !== null) img.setAttribute('data-pl', pl);
+          if (ti !== null) img.setAttribute('title', ti);
+        }
+        ph.replaceWith(img);
+      } else if (ph) {
+        ph.classList.remove('thumb-ph'); // keep the 🎬 icon, stop pulsing
+      }
+      if (Number.isFinite(r.duration) && r.duration > 0) {
+        const meta = card.querySelector('.vmeta');
+        if (meta && meta.textContent.indexOf(':') < 0) meta.textContent += ' · ' + fmtTime(r.duration);
+      }
+    });
+    pumpThumbs();
+  }
 }
 function renderStore() {
   const box = $('#storageList');
@@ -144,8 +255,9 @@ function renderStore() {
   $('#storeCrumbs').innerHTML = crumbs;
   $('#storeViewList').style.borderColor = st.view === 'list' ? '#059669' : '';
   $('#storeViewGrid').style.borderColor = st.view === 'grid' ? '#059669' : '';
-  // Apply type filter
-  const files = st.objects.filter((o) => st.filter === 'all' || storeKind(o.key) === st.filter);
+  // Apply type filter (+ client-side paging so huge flat views stay light)
+  const allFiles = st.objects.filter((o) => st.filter === 'all' || storeKind(o.key) === st.filter);
+  const files = allFiles.slice(0, st.renderLimit);
   const folders = (st.filter === 'all' && !st.flat) ? st.folders : [];
   let html = '';
   if (st.view === 'grid') {
@@ -156,14 +268,18 @@ function renderStore() {
     });
     files.forEach((o) => {
       const kind = storeKind(o.key), u = storeUrl(o.key), nm = storeName(o.key);
+      // Thumbnails are placeholders here — a scroll observer swaps in the real
+      // preview only when the card is near the viewport (see observeThumbs).
+      // Video cards never mount a <video> until opened: posters are captured
+      // to canvas on demand instead, so 100 videos don't stall each other.
       let thumb;
-      if (kind === 'image') thumb = '<img class="store-thumb" loading="lazy" src="' + u + '" alt="" />';
-      else if (kind === 'video') thumb = '<video class="store-thumb" preload="metadata" muted playsinline src="' + u + '"></video>';
+      if (kind === 'image') thumb = '<img class="store-thumb thumb-ph" data-thumb data-src="' + u + '" alt="" />';
+      else if (kind === 'video') thumb = '<div class="store-folder thumb-ph" data-thumb>🎬</div>';
       else if (kind === 'audio') thumb = '<div class="store-folder">🎵</div>';
       else thumb = '<div class="store-folder">📄</div>';
-      html += '<div class="store-card" data-key="' + esc(o.key) + '">' + thumb +
+      html += '<div class="store-card" data-key="' + esc(o.key) + '" data-kind="' + kind + '">' + thumb +
         '<div class="store-meta"><div class="truncate" title="' + esc(o.key) + '">' + esc(nm) + '</div>' +
-        '<div class="text-zinc-500">' + fmtSize(o.size) + '</div></div></div>';
+        '<div class="text-zinc-500 vmeta">' + fmtSize(o.size) + '</div></div></div>';
     });
     html += '</div>';
   } else {
@@ -181,9 +297,11 @@ function renderStore() {
     });
   }
   if (!folders.length && !files.length) html += '<div class="text-zinc-500">empty folder</div>';
-  if (st.truncated) html += '<div class="mt-3"><button class="btn" id="storeMore">Load more (' + st.objects.length + ' shown)…</button></div>';
+  if (allFiles.length > files.length) html += '<div class="mt-3"><button class="btn" id="storeShowMore">Show more (' + files.length + ' of ' + allFiles.length + ')…</button></div>';
+  if (st.truncated) html += '<div class="mt-3"><button class="btn" id="storeMore">Load more from storage (' + st.objects.length + ' fetched)…</button></div>';
   else if (st.flat && st.objects.length) html += '<div class="text-zinc-500 text-xs mt-2">' + st.objects.length + ' files, flat view — no subfolders to dig through.</div>';
   box.innerHTML = html;
+  observeThumbs(box);
 }
 $('#listBtn').addEventListener('click', () => loadStore(false));
 $('#storeFlat').addEventListener('click', () => {
@@ -193,9 +311,10 @@ $('#storeFlat').addEventListener('click', () => {
 });
 $('#storeViewList').addEventListener('click', () => { storeState.view = 'list'; renderStore(); });
 $('#storeViewGrid').addEventListener('click', () => { storeState.view = 'grid'; renderStore(); });
-$('#storeFilter').addEventListener('change', (e) => { storeState.filter = e.target.value; renderStore(); });
+$('#storeFilter').addEventListener('change', (e) => { storeState.filter = e.target.value; storeState.renderLimit = STORE_PAGE; renderStore(); });
 $('#storageList').addEventListener('click', (e) => {
   if (e.target.closest('#storeMore')) { loadStore(true); return; }
+  if (e.target.closest('#storeShowMore')) { storeState.renderLimit += STORE_PAGE; renderStore(); return; }
   const f = e.target.closest('[data-folder]');
   if (f) { storeState.prefix = f.dataset.folder; loadStore(false); return; }
   const c = e.target.closest('[data-key]');
@@ -245,13 +364,15 @@ function renderPlaylist() {
     const kind = storeKind(o.key), u = storeUrl(o.key);
     const cls = i === viewerState.idx ? ' active' : '';
     const sel = 'data-pl="' + i + '" title="' + esc(storeName(o.key)) + '"';
-    if (kind === 'image') return '<img class="pl-thumb' + cls + '" ' + sel + ' loading="lazy" src="' + u + '" alt="" />';
-    if (kind === 'video') return '<video class="pl-thumb' + cls + '" ' + sel + ' preload="metadata" muted playsinline src="' + u + '"></video>';
+    // Lazy like the grid — playlist can hold the whole flat view.
+    if (kind === 'image') return '<img class="pl-thumb thumb-ph' + cls + '" ' + sel + ' data-thumb data-src="' + u + '" data-kind="image" data-key="' + esc(o.key) + '" alt="" />';
+    if (kind === 'video') return '<div class="pl-thumbicon thumb-ph' + cls + '" ' + sel + ' data-thumb data-kind="video" data-key="' + esc(o.key) + '">🎬</div>';
     const icon = kind === 'audio' ? '🎵' : '📄';
     return '<div class="pl-thumbicon' + cls + '" ' + sel + '>' + icon + '</div>';
   }).join('');
   const active = box.querySelector('.active');
   if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+  observeThumbs(box);
 }
 $('#viewerPlaylist').addEventListener('click', (e) => {
   const t = e.target.closest('[data-pl]');
