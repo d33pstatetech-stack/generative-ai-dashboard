@@ -244,14 +244,18 @@ async function handleApiRoute(request, env, path, url) {
   if (path === '/api/storage/list' && request.method === 'GET') {
     if (!env.ASSETS_BUCKET) return jsonResponse({ configured: false, hint: 'Create R2 bucket genai-assets and bind ASSETS_BUCKET' });
     const prefix = url.searchParams.get('prefix') || '';
-    const delimiter = url.searchParams.get('delimiter') || '/';
-    const listed = await env.ASSETS_BUCKET.list({ prefix, delimiter, limit: 100 });
+    const recursive = url.searchParams.get('recursive') === '1';
+    const delimiter = recursive ? undefined : (url.searchParams.get('delimiter') || '/');
+    const cursor = url.searchParams.get('cursor') || undefined;
+    const listed = await env.ASSETS_BUCKET.list({ prefix, delimiter, cursor, limit: 1000 });
     return jsonResponse({
       configured: true,
       prefix,
+      recursive,
       folders: listed.delimitedPrefixes || [],
       objects: (listed.objects || []).map((o) => ({ key: o.key, size: o.size, uploaded: o.uploaded })),
       truncated: !!listed.truncated,
+      cursor: listed.truncated ? (listed.cursor || null) : null,
     });
   }
   if (path === '/api/storage/upload' && request.method === 'POST') {

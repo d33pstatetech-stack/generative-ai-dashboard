@@ -85,7 +85,7 @@ $('#refreshBtn').addEventListener('click', () => loadBalances(true));
 
 // Storage explorer: folder navigation, list/grid views, type filter,
 // thumbnails, and a viewer modal with video controls (speed, slow-mo, frame step).
-const storeState = { prefix: '', view: 'grid', filter: 'all', folders: [], objects: [], loading: false };
+const storeState = { prefix: '', view: 'grid', filter: 'all', flat: false, folders: [], objects: [], cursor: null, truncated: false, loading: false };
 const STORE_IMG = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'svg', 'bmp'];
 const STORE_VID = ['mp4', 'webm', 'mov', 'm4v'];
 const STORE_AUD = ['mp3', 'wav', 'ogg', 'm4a', 'flac'];
@@ -111,18 +111,24 @@ function fmtTime(s) {
   const m = Math.floor(s / 60), sec = Math.floor(s % 60);
   return m + ':' + String(sec).padStart(2, '0');
 }
-async function loadStore() {
+async function loadStore(more) {
   const box = $('#storageList');
-  storeState.loading = true;
+  const st = storeState;
+  st.loading = true;
   try {
-    const j = await api('/api/storage/list?prefix=' + encodeURIComponent(storeState.prefix) + '&delimiter=/');
+    let q = '/api/storage/list?prefix=' + encodeURIComponent(st.prefix);
+    if (st.flat) q += '&recursive=1';
+    else q += '&delimiter=/';
+    if (more && st.cursor) q += '&cursor=' + encodeURIComponent(st.cursor);
+    const j = await api(q);
     if (!j.configured) { box.textContent = 'R2 not configured: ' + j.hint; return; }
-    storeState.folders = j.folders || [];
-    storeState.objects = j.objects || [];
-    if (j.truncated) box.dataset.note = ' (list truncated at 100 — narrow the prefix)';
+    st.folders = j.folders || [];
+    st.objects = more ? st.objects.concat(j.objects || []) : (j.objects || []);
+    st.truncated = !!j.truncated;
+    st.cursor = j.cursor || null;
     renderStore();
   } catch (e) { box.textContent = String(e.message); }
-  finally { storeState.loading = false; }
+  finally { st.loading = false; }
 }
 function renderStore() {
   const box = $('#storageList');
@@ -140,7 +146,7 @@ function renderStore() {
   $('#storeViewGrid').style.borderColor = st.view === 'grid' ? '#059669' : '';
   // Apply type filter
   const files = st.objects.filter((o) => st.filter === 'all' || storeKind(o.key) === st.filter);
-  const folders = st.filter === 'all' ? st.folders : [];
+  const folders = (st.filter === 'all' && !st.flat) ? st.folders : [];
   let html = '';
   if (st.view === 'grid') {
     html += '<div class="store-grid">';
@@ -175,16 +181,23 @@ function renderStore() {
     });
   }
   if (!folders.length && !files.length) html += '<div class="text-zinc-500">empty folder</div>';
-  if (box.dataset.note) { html += '<div class="text-zinc-500 text-xs mt-2">' + esc(box.dataset.note) + '</div>'; delete box.dataset.note; }
+  if (st.truncated) html += '<div class="mt-3"><button class="btn" id="storeMore">Load more (' + st.objects.length + ' shown)…</button></div>';
+  else if (st.flat && st.objects.length) html += '<div class="text-zinc-500 text-xs mt-2">' + st.objects.length + ' files, flat view — no subfolders to dig through.</div>';
   box.innerHTML = html;
 }
-$('#listBtn').addEventListener('click', loadStore);
+$('#listBtn').addEventListener('click', () => loadStore(false));
+$('#storeFlat').addEventListener('click', () => {
+  storeState.flat = !storeState.flat;
+  $('#storeFlat').style.borderColor = storeState.flat ? '#059669' : '';
+  loadStore(false);
+});
 $('#storeViewList').addEventListener('click', () => { storeState.view = 'list'; renderStore(); });
 $('#storeViewGrid').addEventListener('click', () => { storeState.view = 'grid'; renderStore(); });
 $('#storeFilter').addEventListener('change', (e) => { storeState.filter = e.target.value; renderStore(); });
 $('#storageList').addEventListener('click', (e) => {
+  if (e.target.closest('#storeMore')) { loadStore(true); return; }
   const f = e.target.closest('[data-folder]');
-  if (f) { storeState.prefix = f.dataset.folder; loadStore(); return; }
+  if (f) { storeState.prefix = f.dataset.folder; loadStore(false); return; }
   const c = e.target.closest('[data-key]');
   if (c && storeKind(c.dataset.key) !== 'other') { openViewer(c.dataset.key); return; }
 });
@@ -192,7 +205,7 @@ $('#storeCrumbs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-crumb]');
   if (!b) return;
   storeState.prefix = b.dataset.crumb;
-  loadStore();
+  loadStore(false);
 });
 
 // Viewer modal: images full-size; video/audio with custom controls
@@ -214,6 +227,7 @@ function closeViewer() {
   $('#viewerModal').classList.add('hidden');
   $('#viewerStage').innerHTML = '';
   $('#viewerControls').innerHTML = '';
+  $('#viewerPlaylist').innerHTML = '';
   viewerState.files = [];
 }
 function viewerStep(d) {
@@ -221,12 +235,37 @@ function viewerStep(d) {
   viewerState.idx = (viewerState.idx + d + viewerState.files.length) % viewerState.files.length;
   renderViewer();
 }
+// Thumbnail playlist strip: the whole current file list is the queue —
+// click any thumb to jump, and video auto-advances to the next item on ended.
+function renderPlaylist() {
+  const box = $('#viewerPlaylist');
+  const files = viewerState.files;
+  if (files.length < 2) { box.innerHTML = ''; return; }
+  box.innerHTML = files.map((o, i) => {
+    const kind = storeKind(o.key), u = storeUrl(o.key);
+    const cls = i === viewerState.idx ? ' active' : '';
+    const sel = 'data-pl="' + i + '" title="' + esc(storeName(o.key)) + '"';
+    if (kind === 'image') return '<img class="pl-thumb' + cls + '" ' + sel + ' loading="lazy" src="' + u + '" alt="" />';
+    if (kind === 'video') return '<video class="pl-thumb' + cls + '" ' + sel + ' preload="metadata" muted playsinline src="' + u + '"></video>';
+    const icon = kind === 'audio' ? '🎵' : '📄';
+    return '<div class="pl-thumbicon' + cls + '" ' + sel + '>' + icon + '</div>';
+  }).join('');
+  const active = box.querySelector('.active');
+  if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+$('#viewerPlaylist').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-pl]');
+  if (!t) return;
+  viewerState.idx = parseInt(t.dataset.pl, 10) || 0;
+  renderViewer();
+});
 function renderViewer() {
   const f = viewerState.files[viewerState.idx];
   if (!f) { closeViewer(); return; }
   const kind = storeKind(f.key), u = storeUrl(f.key);
   $('#viewerTitle').textContent = f.key + '  (' + (viewerState.idx + 1) + '/' + viewerState.files.length + ', ' + fmtSize(f.size) + ')';
   $('#viewerOpen').href = u;
+  renderPlaylist();
   const stage = $('#viewerStage'), ctrl = $('#viewerControls');
   if (kind === 'image') {
     stage.innerHTML = '<img src="' + u + '" alt="" />';
@@ -263,6 +302,12 @@ function renderViewer() {
   });
   m.addEventListener('play', () => { $('#vPlay').textContent = '⏸'; });
   m.addEventListener('pause', () => { $('#vPlay').textContent = '▶'; });
+  m.addEventListener('ended', () => {
+    if (m.loop || viewerState.files.length < 2) return;
+    viewerStep(1);
+    const nm = $('#viewerMedia');
+    if (nm && nm.play) nm.play().catch(() => {});
+  });
   $('#vPlay').addEventListener('click', () => { if (m.paused) m.play().catch(() => {}); else m.pause(); });
   seek.addEventListener('input', () => {
     if (Number.isFinite(m.duration) && m.duration > 0) m.currentTime = (seek.value / 1000) * m.duration;
