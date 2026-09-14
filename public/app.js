@@ -133,24 +133,52 @@ async function loadStore(more) {
   finally { st.loading = false; }
 }
 // Lazy thumbnails: placeholders swap in only when scrolled near the viewport.
-// At most 4 video captures run at once so the browser never self-DDoSes.
+// The queue is viewport-prioritized, not FIFO: jobs for cards that scrolled
+// away or were removed are skipped (not run), and everything parks while the
+// viewer is open so playback gets all of the browser's ~6 per-origin
+// connections. Without this, 200 queued captures starve each other and the
+// viewer — cards pulse forever and playback stalls with no error.
+let viewerMediaOpen = false;
 const thumbObserver = ('IntersectionObserver' in window) ? new IntersectionObserver((ents) => {
   for (const en of ents) {
     if (en.isIntersecting) { thumbObserver.unobserve(en.target); loadThumb(en.target); }
   }
-}, { rootMargin: '500px' }) : null;
-const thumbQueue = [];
+}, { rootMargin: '200px' }) : null;
+const thumbQueue = []; // {el, tries, prio}
 let thumbActive = 0;
+function elNearViewport(el, margin) {
+  try {
+    const r = el.getBoundingClientRect();
+    const m = margin == null ? 800 : margin;
+    return r.bottom > -m && r.top < (window.innerHeight + m);
+  } catch { return true; }
+}
 function pumpThumbs() {
-  while (thumbActive < 4 && thumbQueue.length) {
+  // One pass over the current queue per call — requeued (parked) jobs wait
+  // for the next pump instead of burning their retries in a single loop.
+  let n = thumbQueue.length;
+  while (thumbActive < 4 && thumbQueue.length && n-- > 0) {
     const job = thumbQueue.shift();
+    if (!job.el.isConnected) continue; // card re-rendered — stale job
+    if (viewerMediaOpen && !job.prio) { thumbQueue.push(job); continue; } // free parking while watching
+    if (!elNearViewport(job.el)) {
+      job.tries = (job.tries || 0) + 1;
+      if (job.tries < 20) { thumbQueue.push(job); continue; }
+      // Give up: static icon, stop pulsing. Fresh renders re-observe.
+      try {
+        job.el.classList.remove('thumb-ph');
+        job.el.removeAttribute('data-thumb');
+      } catch {}
+      continue;
+    }
     thumbActive++;
-    try { job().catch(() => {}).finally(() => { thumbActive--; pumpThumbs(); }); }
-    catch { thumbActive--; }
+    job.el.dataset.done = '1';
+    runThumbCapture(job).catch(() => {}).finally(() => { thumbActive--; pumpThumbs(); });
   }
 }
-function observeThumbs(root) {
+function observeThumbs(root, prio) {
   const els = (root || document).querySelectorAll('[data-thumb]:not([data-done])');
+  if (prio) els.forEach((el) => { el.dataset.prio = '1'; });
   if (!thumbObserver) { els.forEach(loadThumb); return; }
   els.forEach((el) => thumbObserver.observe(el));
 }
@@ -203,13 +231,13 @@ function captureVideoPoster(url, timeoutMs) {
 }
 function loadThumb(el) {
   if (!el || el.dataset.done) return;
-  el.dataset.done = '1';
   const card = el.closest('[data-kind]');
-  const kind = card ? card.dataset.kind : '';
-  const key = card ? card.dataset.key : '';
+  const kind = card ? card.dataset.kind : (el.dataset.kind || '');
+  const key = card ? card.dataset.key : el.dataset.key;
   if (!key) return;
   if (kind === 'image') {
     if (el.tagName === 'IMG') {
+      el.dataset.done = '1';
       el.addEventListener('error', () => { el.classList.remove('thumb-ph'); }, { once: true });
       el.addEventListener('load', () => { el.classList.remove('thumb-ph'); }, { once: true });
       el.src = el.dataset.src;
@@ -217,39 +245,49 @@ function loadThumb(el) {
     return;
   }
   if (kind === 'video') {
-    thumbQueue.push(async () => {
-      const r = await captureVideoPoster(storeUrl(key), 12000);
-      // Playlist thumbs carry data-key themselves; grid thumbs live inside the card.
-      const ph = (card === el) ? el : (card ? card.querySelector('[data-thumb]') : null);
-      if (r.dataUrl && ph) {
-        const img = document.createElement('img');
-        img.alt = '';
-        img.src = r.dataUrl;
-        img.className = ph.hasAttribute('data-pl')
-          ? ('pl-thumb' + (ph.className.indexOf('active') >= 0 ? ' active' : ''))
-          : 'store-thumb';
-        if (ph.hasAttribute('data-pl')) {
-          const pl = ph.getAttribute('data-pl'), ti = ph.getAttribute('title');
-          if (pl !== null) img.setAttribute('data-pl', pl);
-          if (ti !== null) img.setAttribute('title', ti);
-        }
-        ph.replaceWith(img);
-      } else if (ph) {
-        ph.classList.remove('thumb-ph'); // keep the 🎬 icon, stop pulsing
-        ph.setAttribute('title', 'No preview: ' + (r.err || 'no-frame'));
-        if (r.err) {
-          const b = document.createElement('div');
-          b.className = 'vfail';
-          b.textContent = r.err;
-          ph.appendChild(b);
-        }
-      }
-      if (Number.isFinite(r.duration) && r.duration > 0) {
-        const meta = card.querySelector('.vmeta');
-        if (meta && meta.textContent.indexOf(':') < 0) meta.textContent += ' · ' + fmtTime(r.duration);
-      }
-    });
+    // Queued — done flag is set only when the capture actually starts,
+    // so parked jobs stay eligible instead of being marked finished.
+    thumbQueue.push({ el, tries: 0, prio: el.dataset.prio === '1' });
     pumpThumbs();
+  }
+}
+async function runThumbCapture(job) {
+  const el = job.el;
+  const card = el.closest('[data-kind]');
+  const key = card ? card.dataset.key : el.dataset.key;
+  if (!key || !el.isConnected) return;
+  let r;
+  try { r = await captureVideoPoster(storeUrl(key), 12000); }
+  catch { r = { dataUrl: null, duration: NaN, err: 'capture-threw' }; }
+  if (!el.isConnected) return; // navigated away mid-capture
+  // Playlist thumbs carry data-key themselves; grid thumbs live inside the card.
+  const ph = (card === el || !card) ? el : (card.querySelector('[data-thumb]') || el);
+  if (r.dataUrl && ph.isConnected) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = r.dataUrl;
+    img.className = ph.hasAttribute('data-pl')
+      ? ('pl-thumb' + (ph.className.indexOf('active') >= 0 ? ' active' : ''))
+      : 'store-thumb';
+    if (ph.hasAttribute('data-pl')) {
+      const pl = ph.getAttribute('data-pl'), ti = ph.getAttribute('title');
+      if (pl !== null) img.setAttribute('data-pl', pl);
+      if (ti !== null) img.setAttribute('title', ti);
+    }
+    ph.replaceWith(img);
+  } else if (ph.isConnected) {
+    ph.classList.remove('thumb-ph'); // keep the 🎬 icon, stop pulsing
+    ph.setAttribute('title', 'No preview: ' + (r.err || 'no-frame'));
+    if (r.err) {
+      const b = document.createElement('div');
+      b.className = 'vfail';
+      b.textContent = r.err;
+      ph.appendChild(b);
+    }
+  }
+  if (Number.isFinite(r.duration) && r.duration > 0 && card && card.isConnected) {
+    const meta = card.querySelector('.vmeta');
+    if (meta && meta.textContent.indexOf(':') < 0) meta.textContent += ' · ' + fmtTime(r.duration);
   }
 }
 function renderStore() {
@@ -350,6 +388,7 @@ function openViewer(key) {
   if (i < 0) i = 0;
   viewerState.files = files;
   viewerState.idx = i;
+  viewerMediaOpen = true; // park background captures — playback gets the connections
   $('#viewerModal').classList.remove('hidden');
   renderViewer();
 }
@@ -359,6 +398,9 @@ function closeViewer() {
   $('#viewerControls').innerHTML = '';
   $('#viewerPlaylist').innerHTML = '';
   viewerState.files = [];
+  viewerMediaOpen = false;
+  pumpThumbs();
+  observeThumbs($('#storageList')); // pick up cards parked while watching
 }
 function viewerStep(d) {
   if (!viewerState.files.length) return;
@@ -383,7 +425,7 @@ function renderPlaylist() {
   }).join('');
   const active = box.querySelector('.active');
   if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'center' });
-  observeThumbs(box);
+  observeThumbs(box, true); // playlist thumbs jump the queue even while watching
 }
 $('#viewerPlaylist').addEventListener('click', (e) => {
   const t = e.target.closest('[data-pl]');
