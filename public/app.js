@@ -112,6 +112,52 @@ function fmtTime(s) {
   const m = Math.floor(s / 60), sec = Math.floor(s % 60);
   return m + ':' + String(sec).padStart(2, '0');
 }
+// Frame-export timestamp: 13S, 1M05S, 1H02M03S (floored to whole seconds).
+function frameStamp(sec) {
+  sec = Math.max(0, Math.floor(Number(sec) || 0));
+  const p2 = (n) => String(n).padStart(2, '0');
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  if (h > 0) return h + 'H' + p2(m) + 'M' + p2(s) + 'S';
+  if (m > 0) return m + 'M' + p2(s) + 'S';
+  return s + 'S';
+}
+function frameBaseName(key) {
+  const nm = storeName(key).replace(/\.[a-z0-9]{2,5}$/i, '');
+  return (nm.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^[-.]+|[-.]+$/g, '') || 'frame').slice(0, 120);
+}
+// Export the exact frame the video is paused on → frames/<video>_<stamp>.jpg
+// (top-level folder, next to muapi/ replicate/ wavespeed/). Perfect for
+// grabbing a clean I2V start frame without taking a bad tail frame.
+async function exportFrame() {
+  const msg = $('#vExportMsg');
+  const say = (t) => { if (msg) msg.textContent = t; };
+  const m = $('#viewerMedia');
+  const f = viewerState.files[viewerState.idx];
+  if (!m || m.tagName !== 'VIDEO' || !f) return;
+  m.pause();
+  if (m.readyState < 2 || !m.videoWidth || !m.videoHeight) {
+    say('frame not ready — play a second, pause, retry'); return;
+  }
+  let blob = null;
+  try {
+    const c = document.createElement('canvas');
+    c.width = m.videoWidth; c.height = m.videoHeight;
+    c.getContext('2d').drawImage(m, 0, 0, c.width, c.height);
+    blob = await new Promise((r) => { try { c.toBlob(r, 'image/jpeg', 0.92); } catch { r(null); } });
+  } catch { blob = null; }
+  if (!blob) { say('capture blocked by browser'); return; }
+  const key = 'frames/' + frameBaseName(f.key) + '_' + frameStamp(m.currentTime) + '.jpg';
+  say('uploading ' + key + '…');
+  try {
+    const r = await fetch('/api/storage/upload?key=' + encodeURIComponent(key), {
+      method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) { say('export failed: ' + (j.error || ('HTTP ' + r.status))); return; }
+    say('saved ✓ ' + key);
+    if (storeState.prefix === '' || storeState.prefix === 'frames/') loadStore(false);
+  } catch (e) { say('export failed: ' + e.message); }
+}
 async function loadStore(more) {
   const box = $('#storageList');
   const st = storeState;
@@ -464,6 +510,7 @@ function renderViewer() {
     '<input type="range" id="vVol" min="0" max="100" value="100" style="width:70px" title="Volume" />' +
     '<button class="vbtn" id="vLoop" title="Loop">🔁</button>' +
     (kind === 'video' ? '<button class="vbtn" id="vFull" title="Fullscreen">⛶</button>' : '') +
+    (kind === 'video' ? '<button class="vbtn" id="vShot" title="Export this frame to frames/ (works paused)">📷</button><span id="vExportMsg" class="text-zinc-400"></span>' : '') +
     '<a class="vbtn" href="' + u + '" download="' + esc(storeName(f.key)) + '">Download</a>';
   let prevSpeed = 1;
   const t = $('#vTime'), seek = $('#vSeek');
@@ -510,6 +557,8 @@ function renderViewer() {
   $('#vFwd').addEventListener('click', () => stepFrame(1));
   $('#vVol').addEventListener('input', (e) => { m.volume = (parseInt(e.target.value, 10) || 0) / 100; m.muted = false; });
   $('#vLoop').addEventListener('click', (e) => { m.loop = !m.loop; e.target.classList.toggle('on', m.loop); });
+  const shot = $('#vShot');
+  if (shot) shot.addEventListener('click', exportFrame);
   const full = $('#vFull');
   if (full) full.addEventListener('click', () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
