@@ -190,17 +190,19 @@ async function getProviderBalance(env, provider, opts = {}) {
 
 function links(env) {
   return [
-    { id: 'muapi', title: 'MuAPI Prompt Generator', url: env.MUAPI_APP_URL || 'https://muapi-prompt-generator.workers.dev', kind: 'app', desc: '600+ image/video/audio/3D models, D1 catalog, Worker proxy' },
-    { id: 'replicate', title: 'Replicate Prompt Orchestrator', url: env.REPLICATE_APP_URL || 'https://replicate-prompt-orchestrator.workers.dev', kind: 'app', desc: 'Schema-driven Replicate UI + enhancer' },
+    { id: 'muapi', title: 'MuAPI Prompt Generator', url: env.MUAPI_APP_URL || 'https://muapi-prompt-generator.d33pstatetech.workers.dev', kind: 'app', desc: '600+ image/video/audio/3D models, D1 catalog, Worker proxy' },
+    { id: 'replicate', title: 'Replicate Prompt Orchestrator', url: env.REPLICATE_APP_URL || 'https://replicate-prompt-orchestrator.d33pstatetech.workers.dev', kind: 'app', desc: 'Schema-driven Replicate UI + enhancer' },
+    { id: 'wavespeed', title: 'WaveSpeed Prompt Generator', url: env.WAVESPEED_APP_URL || 'https://wavespeed-prompt-generator.d33pstatetech.workers.dev', kind: 'app', desc: '1035-model WaveSpeed catalog, D1 params, R2 autosave' },
     { id: 'muapi-billing', title: 'MuAPI Billing', url: 'https://muapi.ai/dashboard/billing', kind: 'billing' },
     { id: 'replicate-billing', title: 'Replicate Billing', url: 'https://replicate.com/account/billing', kind: 'billing' },
     { id: 'wavespeed-billing', title: 'WaveSpeed Billing', url: 'https://wavespeed.ai/billing', kind: 'billing' },
     { id: 'runpod-console', title: 'RunPod Console', url: 'https://www.runpod.io/console', kind: 'billing' },
+    { id: 'runpod-tree', title: 'RunPod Volume File Tree (vz9pcezb40)', url: './runpod-tree.txt', kind: 'data', desc: 'Full tree listing of the RunPod network volume — refreshed 2026-09-15, 5287 objects' },
     { id: 'modal-billing', title: 'Modal Billing', url: 'https://modal.com/settings/billing', kind: 'billing' },
   ];
 }
 
-const BUILD_VERSION = '2026-09-14-frames.1';
+const BUILD_VERSION = '2026-09-15-header.1';
 
 async function handleApiRoute(request, env, path, url) {
   if (path === '/api/health' && request.method === 'GET') {

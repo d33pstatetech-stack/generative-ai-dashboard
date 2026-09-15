@@ -9,10 +9,12 @@
 <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
-<header class="border-b border-zinc-800 sticky top-0 bg-zinc-950/90 backdrop-blur z-10">
-  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-    <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i>
-    <h1 class="font-bold">Generative AI Dashboard</h1>
+<header class="border-b border-zinc-800 sticky top-0 bg-zinc-950/90 backdrop-blur z-40">
+  <div class="max-w-6xl mx-auto px-4 py-2 flex items-center gap-3">
+    <a href="./" title="Back to dashboard home" class="flex items-center gap-3 shrink-0 hover:opacity-90">
+      <img src="./logo.png" alt="AI Slop Generator logo" class="h-10 w-10 rounded-lg object-cover ring-1 ring-zinc-700" />
+      <span class="font-bold text-lg">Generative AI Dashboard</span>
+    </a>
     <span id="healthBadge" class="ml-auto text-xs text-zinc-400">checking…</span>
   </div>
   <nav class="max-w-6xl mx-auto px-4 pb-3 flex gap-2 text-sm">
@@ -28,7 +30,7 @@
 <main class="max-w-6xl mx-auto px-4 py-6">
   <section id="tab-projects" class="tab">
     <h2 class="text-lg font-semibold mb-2">Projects</h2>
-    <p class="text-sm text-zinc-400 mb-4">Links to your prompt generators. Set URLs via <code>MUAPI_APP_URL</code> / <code>REPLICATE_APP_URL</code> vars.</p>
+    <p class="text-sm text-zinc-400 mb-4">Links to your prompt generators. Set URLs via <code>MUAPI_APP_URL</code> / <code>REPLICATE_APP_URL</code> / <code>WAVESPEED_APP_URL</code> vars.</p>
     <div id="linksGrid" class="grid md:grid-cols-2 gap-3"></div>
   </section>
 

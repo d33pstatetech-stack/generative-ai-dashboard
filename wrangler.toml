@@ -25,8 +25,9 @@ bucket_name = "genai-assets"
 preview_bucket_name = "genai-assets"
 
 [vars]
-MUAPI_APP_URL = "https://muapi-prompt-generator.workers.dev"
-REPLICATE_APP_URL = "https://replicate-prompt-orchestrator.workers.dev"
+MUAPI_APP_URL = "https://muapi-prompt-generator.d33pstatetech.workers.dev"
+REPLICATE_APP_URL = "https://replicate-prompt-orchestrator.d33pstatetech.workers.dev"
+WAVESPEED_APP_URL = "https://wavespeed-prompt-generator.d33pstatetech.workers.dev"
 RUNPOD_VOLUME_ID = "vz9pcezb40"
 RUNPOD_S3_ENDPOINT_DEFAULT = "https://s3api-us-nc-1.runpod.io"
 RUNPOD_S3_REGION_DEFAULT = "US-NC-1"
