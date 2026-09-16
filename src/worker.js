@@ -9,9 +9,10 @@
  *   GET  /api/balance                → all providers (cached where possible)
  *   GET  /api/balance/:provider      → muapi|wavespeed|runpod|replicate|modal
  *   PUT  /api/balance/:provider      → {value, note} manual fallback (replicate/modal)
- *   GET  /api/storage/list?prefix=
- *   POST /api/storage/upload?key=    → body = file bytes
- *   GET  /api/storage/download?key=
+  *   GET  /api/storage/list?prefix=
+  *   POST /api/storage/upload?key=    → body = file bytes
+  *   GET  /api/storage/download?key=
+  *   DELETE /api/storage/object?key=  → permanently delete one object
  *   GET  /api/history/runs?provider=&model_like=&status=&min_rating=&order=newest|top&limit=
  *   GET  /api/history/enhancements?kind=&model_like=&limit=
  *   GET  /api/history/stats          → totals, by provider/model, ratings
@@ -203,7 +204,7 @@ function links(env) {
   ];
 }
 
-const BUILD_VERSION = '2026-09-16-redesign.2';
+const BUILD_VERSION = '2026-09-16-redesign.3';
 
 async function handleApiRoute(request, env, path, url) {
   if (path === '/api/health' && request.method === 'GET') {
@@ -314,6 +315,13 @@ async function handleApiRoute(request, env, path, url) {
     }
     const headers = { 'Content-Type': ct, 'Accept-Ranges': 'bytes', 'Content-Length': String(obj.size) };
     return new Response(obj.body, { headers });
+  }
+  if (path === '/api/storage/object' && request.method === 'DELETE') {
+    if (!env.ASSETS_BUCKET) return jsonResponse({ configured: false }, 500);
+    const key = (url.searchParams.get('key') || '').replace(/^\/+/, '');
+    if (!key) return jsonResponse({ error: 'key required' }, 400);
+    await env.ASSETS_BUCKET.delete(key);
+    return jsonResponse({ ok: true, key });
   }
   // ─── Shared history browser (reads genai-history; writes only ratings) ───
   if (path === '/api/history/runs' && request.method === 'GET') {

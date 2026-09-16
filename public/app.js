@@ -162,8 +162,8 @@ if (stripBtn) stripBtn.addEventListener('click', () => loadBalanceStrip(true));
 
 // Storage explorer: folder navigation, list/grid views, type filter,
 // thumbnails, and a viewer modal with video controls (speed, slow-mo, frame step).
-const storeState = { prefix: '', view: 'grid', filter: 'all', flat: false, folders: [], objects: [], cursor: null, truncated: false, renderLimit: 60, loading: false };
-const STORE_PAGE = 60;
+const storeState = { prefix: '', view: 'grid', filter: 'all', flat: false, folders: [], objects: [], cursor: null, truncated: false, page: 1, selected: new Set(), loading: false };
+const STORE_PAGE = 48;
 const STORE_IMG = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'svg', 'bmp'];
 const STORE_VID = ['mp4', 'webm', 'mov', 'm4v'];
 const STORE_AUD = ['mp3', 'wav', 'ogg', 'm4a', 'flac'];
@@ -250,7 +250,7 @@ async function loadStore(more) {
     st.objects = more ? st.objects.concat(j.objects || []) : (j.objects || []);
     st.truncated = !!j.truncated;
     st.cursor = j.cursor || null;
-    if (!more) st.renderLimit = STORE_PAGE;
+    if (!more) { st.page = 1; st.selected.clear(); }
     renderStore();
   } catch (e) { box.textContent = String(e.message); }
   finally { st.loading = false; }
@@ -413,6 +413,47 @@ async function runThumbCapture(job) {
     if (meta && meta.textContent.indexOf(':') < 0) meta.textContent += ' · ' + fmtTime(r.duration);
   }
 }
+async function deleteStoreKeys(keys, skipConfirm) {
+  keys = (keys || []).filter(Boolean);
+  if (!keys.length) return 0;
+  const label = keys.length === 1 ? storeName(keys[0]) : keys.length + ' files';
+  if (!skipConfirm && !confirm('Permanently delete ' + label + ' from R2? This cannot be undone.')) return 0;
+  let ok = 0;
+  const failed = [];
+  for (const k of keys) {
+    try {
+      const r = await fetch('/api/storage/object?key=' + encodeURIComponent(k), { method: 'DELETE' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+      ok++;
+    } catch (e) { failed.push(k + ' (' + e.message + ')'); }
+  }
+  const gone = new Set(keys.filter((k) => failed.every((f) => f.indexOf(k) !== 0)));
+  storeState.objects = storeState.objects.filter((o) => !gone.has(o.key));
+  gone.forEach((k) => storeState.selected.delete(k));
+  renderStore();
+  if (failed.length) alert('Deleted ' + ok + ', FAILED ' + failed.length + ':\n' + failed.join('\n'));
+  return ok;
+}
+function storePager(totalPages) {
+  const p = storeState.page;
+  if (totalPages <= 1) return '';
+  const win = [];
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || Math.abs(i - p) <= 2) win.push(i);
+  }
+  let html = '<div class="store-pager">';
+  html += '<button class="vbtn" data-page="' + (p - 1) + '"' + (p <= 1 ? ' disabled' : '') + '>‹ Prev</button>';
+  let prev = 0;
+  win.forEach((i) => {
+    if (i - prev > 1) html += '<span class="text-zinc-600 px-1">…</span>';
+    html += '<button class="vbtn' + (i === p ? ' on' : '') + '" data-page="' + i + '">' + i + '</button>';
+    prev = i;
+  });
+  html += '<button class="vbtn" data-page="' + (p + 1) + '"' + (p >= totalPages ? ' disabled' : '') + '>Next ›</button>';
+  html += '<span class="text-zinc-500 text-xs">Page ' + p + ' of ' + totalPages + '</span></div>';
+  return html;
+}
 function renderStore() {
   const box = $('#storageList');
   const st = storeState;
@@ -427,11 +468,19 @@ function renderStore() {
   $('#storeCrumbs').innerHTML = crumbs;
   $('#storeViewList').style.borderColor = st.view === 'list' ? '#059669' : '';
   $('#storeViewGrid').style.borderColor = st.view === 'grid' ? '#059669' : '';
-  // Apply type filter (+ client-side paging so huge flat views stay light)
+  // Apply type filter; files are paged (STORE_PAGE per page), folders always on top.
   const allFiles = st.objects.filter((o) => st.filter === 'all' || storeKind(o.key) === st.filter);
-  const files = allFiles.slice(0, st.renderLimit);
+  const totalPages = Math.max(1, Math.ceil(allFiles.length / STORE_PAGE));
+  if (st.page > totalPages) st.page = totalPages;
+  if (st.page < 1) st.page = 1;
+  const files = allFiles.slice((st.page - 1) * STORE_PAGE, st.page * STORE_PAGE);
   const folders = (st.filter === 'all' && !st.flat) ? st.folders : [];
   let html = '';
+  if (st.selected.size) {
+    html += '<div class="selbar"><span><b>' + st.selected.size + '</b> selected</span>' +
+      '<button class="vbtn danger" id="storeDelSel">Delete selected 🗑</button>' +
+      '<button class="vbtn" id="storeSelClear">Clear</button></div>';
+  }
   if (st.view === 'grid') {
     html += '<div class="store-grid">';
     folders.forEach((f) => {
@@ -440,6 +489,7 @@ function renderStore() {
     });
     files.forEach((o) => {
       const kind = storeKind(o.key), u = storeUrl(o.key), nm = storeName(o.key);
+      const checked = st.selected.has(o.key) ? ' checked' : '';
       // Thumbnails are placeholders here — a scroll observer swaps in the real
       // preview only when the card is near the viewport (see observeThumbs).
       // Video cards never mount a <video> until opened: posters are captured
@@ -449,7 +499,9 @@ function renderStore() {
       else if (kind === 'video') thumb = '<div class="store-folder thumb-ph" data-thumb>🎬</div>';
       else if (kind === 'audio') thumb = '<div class="store-folder">🎵</div>';
       else thumb = '<div class="store-folder">📄</div>';
-      html += '<div class="store-card" data-key="' + esc(o.key) + '" data-kind="' + kind + '">' + thumb +
+      html += '<div class="store-card' + (checked ? ' sel' : '') + '" data-key="' + esc(o.key) + '" data-kind="' + kind + '">' +
+        '<input type="checkbox" class="store-sel" data-sel="' + esc(o.key) + '"' + checked + ' title="select for bulk delete" />' +
+        '<button class="store-del" data-del="' + esc(o.key) + '" title="delete this file">✕</button>' + thumb +
         '<div class="store-meta"><div class="truncate" title="' + esc(o.key) + '">' + esc(nm) + '</div>' +
         '<div class="text-zinc-500 vmeta">' + fmtSize(o.size) + '</div></div></div>';
     });
@@ -461,15 +513,17 @@ function renderStore() {
     files.forEach((o) => {
       const kind = storeKind(o.key);
       const icon = kind === 'image' ? '🖼️' : kind === 'video' ? '🎬' : kind === 'audio' ? '🎵' : '📄';
-      html += '<div class="store-row"><span>' + icon + '</span>' +
+      const checked = st.selected.has(o.key) ? ' checked' : '';
+      html += '<div class="store-row"><input type="checkbox" class="store-selrow" data-sel="' + esc(o.key) + '"' + checked + ' title="select for bulk delete" />' +
+        '<span>' + icon + '</span>' +
         '<a class="underline truncate" href="' + storeUrl(o.key) + '" target="_blank" rel="noopener" style="max-width:60%">' + esc(o.key) + '</a>' +
         '<span class="text-zinc-500">(' + fmtSize(o.size) + ')</span>';
-      if (kind !== 'other') html += ' <button class="vbtn" data-key="' + esc(o.key) + '">View</button>';
-      html += '</div>';
+      if (kind !== 'other') html += ' <button class="vbtn" data-viewkey="' + esc(o.key) + '">View</button>';
+      html += ' <button class="vbtn danger" data-del="' + esc(o.key) + '" title="delete this file">✕</button></div>';
     });
   }
-  if (!folders.length && !files.length) html += '<div class="text-zinc-500">empty folder</div>';
-  if (allFiles.length > files.length) html += '<div class="mt-3"><button class="btn" id="storeShowMore">Show more (' + files.length + ' of ' + allFiles.length + ')…</button></div>';
+  if (!folders.length && !allFiles.length) html += '<div class="text-zinc-500">empty folder</div>';
+  html += storePager(totalPages);
   if (st.truncated) html += '<div class="mt-3"><button class="btn" id="storeMore">Load more from storage (' + st.objects.length + ' fetched)…</button></div>';
   else if (st.flat && st.objects.length) html += '<div class="text-zinc-500 text-xs mt-2">' + st.objects.length + ' files, flat view — no subfolders to dig through.</div>';
   box.innerHTML = html;
@@ -483,14 +537,34 @@ $('#storeFlat').addEventListener('click', () => {
 });
 $('#storeViewList').addEventListener('click', () => { storeState.view = 'list'; renderStore(); });
 $('#storeViewGrid').addEventListener('click', () => { storeState.view = 'grid'; renderStore(); });
-$('#storeFilter').addEventListener('change', (e) => { storeState.filter = e.target.value; storeState.renderLimit = STORE_PAGE; renderStore(); });
+$('#storeFilter').addEventListener('change', (e) => { storeState.filter = e.target.value; storeState.page = 1; storeState.selected.clear(); renderStore(); });
 $('#storageList').addEventListener('click', (e) => {
+  const pg = e.target.closest('[data-page]');
+  if (pg && !pg.disabled) {
+    storeState.page = parseInt(pg.dataset.page, 10) || 1;
+    renderStore();
+    $('#storageList').scrollIntoView({ block: 'start' });
+    return;
+  }
+  if (e.target.closest('#storeDelSel')) { deleteStoreKeys(Array.from(storeState.selected)); return; }
+  if (e.target.closest('#storeSelClear')) { storeState.selected.clear(); renderStore(); return; }
   if (e.target.closest('#storeMore')) { loadStore(true); return; }
-  if (e.target.closest('#storeShowMore')) { storeState.renderLimit += STORE_PAGE; renderStore(); return; }
+  const del = e.target.closest('[data-del]');
+  if (del) { deleteStoreKeys([del.dataset.del]); return; }
+  if (e.target.matches('input[data-sel]')) return; // checkbox toggles via change below
   const f = e.target.closest('[data-folder]');
   if (f) { storeState.prefix = f.dataset.folder; loadStore(false); return; }
+  const v = e.target.closest('[data-viewkey]');
+  if (v) { openViewer(v.dataset.viewkey); return; }
   const c = e.target.closest('[data-key]');
   if (c && storeKind(c.dataset.key) !== 'other') { openViewer(c.dataset.key); return; }
+});
+$('#storageList').addEventListener('change', (e) => {
+  const cb = e.target.closest ? e.target.closest('input[data-sel]') : null;
+  if (!cb) return;
+  if (cb.checked) storeState.selected.add(cb.dataset.sel);
+  else storeState.selected.delete(cb.dataset.sel);
+  renderStore();
 });
 $('#storeCrumbs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-crumb]');
@@ -647,6 +721,19 @@ $('#viewerClose').addEventListener('click', closeViewer);
 $('#viewerBackdrop').addEventListener('click', closeViewer);
 $('#viewerPrev').addEventListener('click', () => viewerStep(-1));
 $('#viewerNext').addEventListener('click', () => viewerStep(1));
+$('#viewerDelete').addEventListener('click', async () => {
+  const f = viewerState.files[viewerState.idx];
+  if (!f) return;
+  const n = await deleteStoreKeys([f.key]);
+  if (n) {
+    viewerState.files.splice(viewerState.idx, 1);
+    if (!viewerState.files.length) closeViewer();
+    else {
+      if (viewerState.idx >= viewerState.files.length) viewerState.idx = 0;
+      renderViewer();
+    }
+  }
+});
 document.addEventListener('keydown', (e) => {
   if ($('#viewerModal').classList.contains('hidden')) return;
   if (e.key === 'Escape') closeViewer();
