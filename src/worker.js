@@ -203,7 +203,7 @@ function links(env) {
   ];
 }
 
-const BUILD_VERSION = '2026-09-16-redesign.1';
+const BUILD_VERSION = '2026-09-16-redesign.2';
 
 async function handleApiRoute(request, env, path, url) {
   if (path === '/api/health' && request.method === 'GET') {

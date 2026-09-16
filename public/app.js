@@ -82,15 +82,6 @@ const APP_CARDS = [
     use: 'Use for <b>video</b> — the largest video-model selection in the stack (Hailuo H3, Veo, Kling, Wan, Seedance…).',
   },
   {
-    id: 'replicate', name: 'Replicate', tag: 'IMAGE + CUSTOM LORAS',
-    bullets: [
-      '<b>16 hand-pinned models</b>: AZNTEN Flux LoRA (dev/schnell), FLUX.1-dev standalone, Krea 2, Qwen-Image, Wan 2.1/2.2, MiniMax H3',
-      '<b>6 personal HF LoRAs</b> (D33pStateTech) + <b>20+ curated NSFW adapters</b> with one-click Fill into LoRA slots',
-      'Schema-driven params with clamps, LoRA-strength sliders &amp; trigger-word hints',
-    ],
-    use: 'Use for <b>image + LoRA work</b> — cheapest, most controllable image generation with your custom LoRAs.',
-  },
-  {
     id: 'wavespeed', name: 'WaveSpeed', tag: 'WIDEST CATALOG · CHEAP BULK',
     bullets: [
       '<b>1,035 models / 16 categories</b> synced to D1 with full param schemas + cost estimator',
@@ -98,6 +89,15 @@ const APP_CARDS = [
       'Live-tested: Z-Image Turbo ≈ <b>$0.005/run</b>',
     ],
     use: 'Use for <b>cheap bulk experimentation</b> across the widest catalog — preview cost before you run.',
+  },
+  {
+    id: 'replicate', name: 'Replicate', tag: 'IMAGE + CUSTOM LORAS',
+    bullets: [
+      '<b>16 hand-pinned models</b>: AZNTEN Flux LoRA (dev/schnell), FLUX.1-dev standalone, Krea 2, Qwen-Image, Wan 2.1/2.2, MiniMax H3',
+      '<b>6 personal HF LoRAs</b> (D33pStateTech) + <b>20+ curated NSFW adapters</b> with one-click Fill into LoRA slots',
+      'Schema-driven params with clamps, LoRA-strength sliders &amp; trigger-word hints',
+    ],
+    use: 'Use for <b>image + LoRA work</b> — cheapest, most controllable image generation with your custom LoRAs.',
   },
 ];
 function renderAppCards(urls) {
@@ -837,8 +837,8 @@ async function loadHistory() {
       const m = histMediaUrl(r);
       const media = m
         ? (histIsVideo(m.url)
-          ? '<video src="' + esc(m.url) + '" controls preload="metadata" class="w-full max-h-64 rounded bg-black"></video>'
-          : '<a href="' + esc(m.url) + '" target="_blank" rel="noopener"><img src="' + esc(m.url) + '" loading="lazy" class="w-full max-h-64 object-contain rounded bg-black" /></a>')
+          ? '<video src="' + esc(m.url) + '" controls preload="metadata" class="hist-media w-full max-h-64 rounded bg-black"></video>'
+          : '<a href="' + esc(m.url) + '" target="_blank" rel="noopener"><img src="' + esc(m.url) + '" loading="lazy" class="hist-media w-full max-h-64 object-contain rounded bg-black" /></a>')
         : '<div class="text-zinc-600 text-sm">no media saved</div>';
       let loras = {};
       try { loras = JSON.parse(r.loras_json || '{}'); } catch {}
@@ -851,6 +851,15 @@ async function loadHistory() {
         '<div class="mt-2 flex items-center gap-1">' + histStars(r) + '<span class="text-xs text-zinc-500 ml-1">rate</span></div>' +
         '</div>';
     }).join('');
+    // Remote CDN links can expire (MuAPI purges after ~30d): swap dead players for a note.
+    grid.querySelectorAll('.hist-media').forEach((el) => {
+      el.addEventListener('error', () => {
+        const note = document.createElement('div');
+        note.className = 'text-zinc-500 text-sm rounded bg-black px-3 py-8 text-center';
+        note.textContent = 'media unavailable — source link expired (no R2 copy was saved)';
+        el.replaceWith(note);
+      }, { once: true });
+    });
     grid.querySelectorAll('[data-rate]').forEach((btn) => btn.addEventListener('click', async () => {
       const [id, rating] = btn.getAttribute('data-rate').split(':');
       try {
