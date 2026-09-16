@@ -197,12 +197,13 @@ function links(env) {
     { id: 'replicate-billing', title: 'Replicate Billing', url: 'https://replicate.com/account/billing', kind: 'billing' },
     { id: 'wavespeed-billing', title: 'WaveSpeed Billing', url: 'https://wavespeed.ai/billing', kind: 'billing' },
     { id: 'runpod-console', title: 'RunPod Console', url: 'https://www.runpod.io/console', kind: 'billing' },
-    { id: 'runpod-tree', title: 'RunPod Volume File Tree (vz9pcezb40)', url: './runpod-tree.txt', kind: 'data', desc: 'Full tree listing of the RunPod network volume — refreshed 2026-09-15, 5287 objects' },
+    { id: 'runpod-tree', title: 'RunPod Volume File Tree (vz9pcezb40)', url: './runpod-tree.html', kind: 'data', desc: 'Styled viewer: overview map, search filter, full listing — 5287 objects' },
+    { id: 'runpod-tree-txt', title: 'RunPod Volume Tree (raw .txt)', url: './runpod-tree.txt', kind: 'data', desc: 'Plain-text fallback of the full tree listing' },
     { id: 'modal-billing', title: 'Modal Billing', url: 'https://modal.com/settings/billing', kind: 'billing' },
   ];
 }
 
-const BUILD_VERSION = '2026-09-15-header.1';
+const BUILD_VERSION = '2026-09-16-redesign.1';
 
 async function handleApiRoute(request, env, path, url) {
   if (path === '/api/health' && request.method === 'GET') {

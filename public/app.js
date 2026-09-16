@@ -24,16 +24,91 @@ async function api(path, opts = {}) {
     const h = await api('/api/health');
     $('#healthBadge').textContent = 'worker ok · ' + (h.version || '?') + ' · db:' + (h.bindings.db ? 'yes' : 'no') + ' r2:' + (h.bindings.r2 ? 'yes' : 'no');
   } catch (e) { $('#healthBadge').textContent = String(e.message); }
+  let appUrls = {};
   try {
     const { links } = await api('/api/links');
-    $('#linksGrid').innerHTML = links.map((l) =>
-      '<div class="card"><div class="font-semibold"><a class="underline" href="' + l.url + '" target="_blank" rel="noopener">' + l.title + '</a></div>' +
-      '<div class="text-xs text-zinc-400">' + (l.desc || l.kind) + '</div>' +
-      '<div class="text-xs truncate text-zinc-500">' + l.url + '</div></div>'
-    ).join('');
-  } catch (e) { $('#linksGrid').innerHTML = '<div class="card">' + String(e.message) + '</div>'; }
+    (links || []).forEach((l) => { if (l.kind === 'app') appUrls[l.id] = l.url; });
+  } catch (e) { $('#appCards').innerHTML = '<div class="card">' + String(e.message) + '</div>'; }
+  renderAppCards(appUrls);
+  loadBalanceStrip(false);
   loadBalances(false);
 })();
+
+// Seven-segment LED renderer (green-on-black, $0.00 uniform format).
+const SEG_MAP = { 0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc', 5: 'afgcd', 6: 'afgedc', 7: 'abc', 8: 'abcdefg', 9: 'abfgcd' };
+function ledHtml(amount) {
+  const s = '$' + Number(amount).toFixed(2);
+  let h = '';
+  for (const ch of s) {
+    if (ch === '$') { h += '<span class="led-dollar">$</span>'; continue; }
+    if (ch === '.') { h += '<span class="led-dot">.</span>'; continue; }
+    if (ch === '-') { h += '<span class="dseg"><i class="sg g on"></i></span>'; continue; }
+    const on = SEG_MAP[ch] || '';
+    h += '<span class="dseg">' + ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((g) =>
+      '<i class="sg ' + g + (on.indexOf(g) >= 0 ? ' on' : '') + '"></i>').join('') + '</span>';
+  }
+  return h;
+}
+function ledError(el, msg) {
+  el.querySelector('.led-value').innerHTML = '<span class="led-err">--.--</span>';
+  el.querySelector('.led-sub').textContent = msg;
+}
+async function loadBalanceStrip(refresh) {
+  const set = async (id, provider, pick) => {
+    const el = document.querySelector(id);
+    try {
+      const j = await api('/api/balance/' + provider + (refresh ? '?refresh=1' : ''));
+      const v = pick(j);
+      if (v == null || !isFinite(Number(v))) { ledError(el, j.error || j.hint || j.note || 'unavailable'); return; }
+      el.querySelector('.led-value').innerHTML = ledHtml(v);
+      el.querySelector('.led-sub').textContent = j.cached ? 'cached' : 'live · ' + new Date(j.asOf || Date.now()).toLocaleTimeString();
+    } catch (e) { ledError(el, String(e.message).slice(0, 60)); }
+  };
+  await Promise.all([
+    set('#led-muapi', 'muapi', (j) => j.balance),
+    set('#led-wavespeed', 'wavespeed', (j) => j.balance),
+    set('#led-runpod', 'runpod', (j) => j.spend30d),
+  ]);
+}
+
+const APP_CARDS = [
+  {
+    id: 'muapi', name: 'MuAPI', tag: 'VIDEO · LARGEST SELECTION',
+    bullets: [
+      '<b>683 models</b> live-counted: 361 video (175 I2V · 106 T2V · 80 V2V), 146 image, 17 LoRA-support, plus training / 3D / audio',
+      'Cloud picker — R2 uploads auto re-hosted for image, video &amp; audio reference inputs',
+      'Shared D1 history + ratings feed the prompt-enhancer templates',
+    ],
+    use: 'Use for <b>video</b> — the largest video-model selection in the stack (Hailuo H3, Veo, Kling, Wan, Seedance…).',
+  },
+  {
+    id: 'replicate', name: 'Replicate', tag: 'IMAGE + CUSTOM LORAS',
+    bullets: [
+      '<b>16 hand-pinned models</b>: AZNTEN Flux LoRA (dev/schnell), FLUX.1-dev standalone, Krea 2, Qwen-Image, Wan 2.1/2.2, MiniMax H3',
+      '<b>6 personal HF LoRAs</b> (D33pStateTech) + <b>20+ curated NSFW adapters</b> with one-click Fill into LoRA slots',
+      'Schema-driven params with clamps, LoRA-strength sliders &amp; trigger-word hints',
+    ],
+    use: 'Use for <b>image + LoRA work</b> — cheapest, most controllable image generation with your custom LoRAs.',
+  },
+  {
+    id: 'wavespeed', name: 'WaveSpeed', tag: 'WIDEST CATALOG · CHEAP BULK',
+    bullets: [
+      '<b>1,035 models / 16 categories</b> synced to D1 with full param schemas + cost estimator',
+      'R2 autosave on every run; presigned-URL cloud references',
+      'Live-tested: Z-Image Turbo ≈ <b>$0.005/run</b>',
+    ],
+    use: 'Use for <b>cheap bulk experimentation</b> across the widest catalog — preview cost before you run.',
+  },
+];
+function renderAppCards(urls) {
+  $('#appCards').innerHTML = APP_CARDS.map((a) =>
+    '<div class="card app-card"><div class="app-tag">' + a.tag + '</div>' +
+    '<div class="app-name">' + a.name + '</div>' +
+    '<ul class="app-bullets">' + a.bullets.map((b) => '<li>' + b + '</li>').join('') + '</ul>' +
+    '<div class="app-use">' + a.use + '</div>' +
+    '<a class="btn app-open" href="' + (urls[a.id] || '#') + '" target="_blank" rel="noopener">Open app <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a></div>'
+  ).join('');
+}
 
 function card(p, body) {
   return '<div class="card"><div class="flex items-center gap-2 font-semibold">' + p +
@@ -82,6 +157,8 @@ async function loadBalances(refresh) {
   } catch (e) { grid.innerHTML = '<div class="card">' + String(e.message) + '</div>'; }
 }
 $('#refreshBtn').addEventListener('click', () => loadBalances(true));
+const stripBtn = $('#stripRefresh');
+if (stripBtn) stripBtn.addEventListener('click', () => loadBalanceStrip(true));
 
 // Storage explorer: folder navigation, list/grid views, type filter,
 // thumbnails, and a viewer modal with video controls (speed, slow-mo, frame step).

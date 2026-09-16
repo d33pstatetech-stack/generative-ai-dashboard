@@ -17,9 +17,19 @@
     </a>
     <span id="healthBadge" class="ml-auto text-xs text-zinc-400">checking…</span>
   </div>
-  <nav class="max-w-6xl mx-auto px-4 pb-3 flex gap-2 text-sm">
+  <nav class="max-w-6xl mx-auto px-4 pb-3 flex gap-2 text-sm items-center">
     <button data-tab="projects" class="tabbtn">Projects</button>
     <button data-tab="balances" class="tabbtn">Balances</button>
+    <div class="dropdown">
+      <button class="tabbtn" aria-haspopup="true">Apps <i class="fa-solid fa-caret-down text-xs"></i></button>
+      <div class="dropdown-menu">
+        <a href="https://muapi-prompt-generator.d33pstatetech.workers.dev" target="_blank" rel="noopener">MuAPI Prompt Generator</a>
+        <a href="https://replicate-prompt-orchestrator.d33pstatetech.workers.dev" target="_blank" rel="noopener">Replicate Prompt Orchestrator</a>
+        <a href="https://wavespeed-prompt-generator.d33pstatetech.workers.dev" target="_blank" rel="noopener">WaveSpeed Prompt Generator</a>
+        <div class="dropdown-sep"></div>
+        <a href="./runpod-tree.html" target="_blank" rel="noopener">RunPod Volume Tree <span class="text-zinc-500">vz9pcezb40</span></a>
+      </div>
+    </div>
     <button data-tab="mask" class="tabbtn">Mask painter</button>
     <button data-tab="depth" class="tabbtn">Depth</button>
     <button data-tab="storage" class="tabbtn">Storage</button>
@@ -29,8 +39,13 @@
 
 <main class="max-w-6xl mx-auto px-4 py-6">
   <section id="tab-projects" class="tab">
-    <h2 class="text-lg font-semibold mb-2">Projects</h2>
-    <div id="linksGrid" class="grid md:grid-cols-2 gap-3"></div>
+    <div id="balanceStrip" class="balance-strip">
+      <div class="led-slot" id="led-muapi"><div class="led-label">MUAPI · BALANCE</div><div class="led-value">loading…</div><div class="led-sub"></div></div>
+      <div class="led-slot" id="led-wavespeed"><div class="led-label">WAVESPEED · BALANCE</div><div class="led-value">loading…</div><div class="led-sub"></div></div>
+      <div class="led-slot" id="led-runpod"><div class="led-label">RUNPOD · 30D SPEND</div><div class="led-value">loading…</div><div class="led-sub"></div></div>
+      <button id="stripRefresh" class="btn text-xs self-center" title="Refresh balances live"><i class="fa-solid fa-rotate"></i></button>
+    </div>
+    <div id="appCards" class="mt-6 flex flex-wrap justify-center gap-4"></div>
   </section>
 
   <section id="tab-balances" class="tab hidden">
