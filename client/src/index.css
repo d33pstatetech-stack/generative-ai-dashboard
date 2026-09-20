@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+/* Generative AI Dashboard — React rework (feature/dashboard-react).
+   Design tokens carried over from the MuAPI React client: dark-first,
+   gray-950 base, violet accents, .panel/.input/.btn vocabulary. */
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: #030712; /* gray-950 */
+  color: #f3f4f6; /* gray-100 */
+}
+
+/* Reusable bits (mirror the MuAPI client vocabulary) */
+.panel {
+  background: rgba(17, 24, 39, 0.7); /* gray-900/70 */
+  border: 1px solid #1f2937; /* gray-800 */
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ca3af; /* gray-400 */
+  margin-bottom: 0.75rem;
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, #c084fc, #818cf8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.input {
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+  color: #f3f4f6;
+  width: 100%;
+  min-height: 44px;
+}
+
+select.input {
+  appearance: auto;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #8b5cf6;
+}
+
+.btn-primary-sm {
+  background: #7c3aed; /* violet-600 */
+  color: #fff;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-height: 44px;
+}
+
+.btn-primary-sm:hover {
+  background: #6d28d9; /* violet-700 */
+}
+
+.btn-primary-sm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #1f2937; /* gray-800 */
+  border: 1px solid #374151;
+  color: #e5e7eb;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+  min-height: 44px;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  padding: 0.1rem 0.5rem;
+  background: #1f2937;
+  border: 1px solid #374151;
+  color: #9ca3af;
+}
+
+.badge.live {
+  background: rgba(6, 78, 59, 0.5);
+  border-color: #065f46;
+  color: #6ee7b7;
+}
+
+.badge.error {
+  background: rgba(127, 29, 29, 0.5);
+  border-color: #991b1b;
+  color: #fca5a5;
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
