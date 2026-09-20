@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { fetchEnhancements, fetchHealth, fetchLinks, fetchRuns, fetchStats, rateRun } from './api';
+import { fetchBalances, fetchEnhancements, fetchHealth, fetchLinks, fetchRuns, fetchStats, rateRun } from './api';
 import EnhancementsList from './components/EnhancementsList';
 import RunsTable from './components/RunsTable';
 import Section from './components/Section';
@@ -32,6 +32,9 @@ export default function App() {
   const [enhModel, setEnhModel] = useState('');
   const [links, setLinks] = useState([]);
   const [linksNote, setLinksNote] = useState('');
+  const [balances, setBalances] = useState(null);
+  const [balancesLoading, setBalancesLoading] = useState(false);
+  const [balancesNote, setBalancesNote] = useState('');
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -69,6 +72,18 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast]);
 
+  const loadBalances = useCallback(async (refresh = false) => {
+    setBalancesLoading(true);
+    try {
+      setBalances(await fetchBalances(refresh));
+      setBalancesNote('');
+    } catch (e) {
+      setBalancesNote(e.message);
+    } finally {
+      setBalancesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -81,6 +96,7 @@ export default function App() {
       }
       loadStats();
       loadRuns(DEFAULT_FILTERS);
+      loadBalances(false);
       try {
         setEnhancements(await fetchEnhancements({}));
       } catch { /* surfaced on manual refresh */ }
@@ -105,6 +121,18 @@ export default function App() {
   const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
   const apps = links.filter((l) => l.kind === 'app');
   const billingLinks = links.filter((l) => l.kind === 'billing' || l.kind === 'data');
+  const fallbackApps = [
+    { id: 'muapi', title: 'MuAPI', url: 'https://muapi-prompt-generator.d33pstatetech.workers.dev' },
+    { id: 'replicate', title: 'Replicate', url: 'https://replicate-prompt-orchestrator.d33pstatetech.workers.dev' },
+    { id: 'wavespeed', title: 'WaveSpeed', url: 'https://wavespeed-prompt-generator.d33pstatetech.workers.dev' },
+  ];
+  const headerApps = apps.length ? apps : fallbackApps;
+  const money = (v) => (v == null || !isFinite(Number(v)) ? '—' : `$${Number(v).toFixed(2)}`);
+  const strip = [
+    { id: 'muapi', label: 'MuAPI', value: money(balances?.muapi?.balance), sub: balances?.muapi?.source || balances?.muapi?.error || '' },
+    { id: 'wavespeed', label: 'WaveSpeed', value: money(balances?.wavespeed?.balance), sub: balances?.wavespeed?.source || balances?.wavespeed?.error || '' },
+    { id: 'runpod', label: 'RunPod 30d', value: money(balances?.runpod?.spend30d), sub: balances?.runpod?.source || balances?.runpod?.error || '' },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -121,7 +149,38 @@ export default function App() {
           </div>
           <span className={`ml-auto w-2 h-2 rounded-full flex-none ${health ? 'bg-emerald-500' : 'bg-gray-600'}`} title={health ? 'Connected' : 'Unknown'}></span>
         </div>
+        <div className="max-w-6xl mx-auto px-4 pb-2 flex gap-2 overflow-x-auto">
+          {headerApps.map((l) => (
+            <a key={l.id} href={l.url} target="_blank" rel="noreferrer"
+              className="flex-none text-xs font-semibold px-3 min-h-[44px] inline-flex items-center rounded-lg bg-violet-600 hover:bg-violet-500 text-white">
+              {l.title} <i className="fas fa-arrow-up-right-from-square text-[10px] ml-1"></i>
+            </a>
+          ))}
+          {billingLinks.map((l) => (
+            <a key={l.id} href={l.url} target="_blank" rel="noreferrer" title={l.title}
+              className="flex-none text-[11px] px-2 min-h-[44px] inline-flex items-center rounded-lg border border-gray-700 text-gray-400 hover:border-violet-500 hover:text-gray-200 max-w-[140px] truncate">
+              {l.title}
+            </a>
+          ))}
+          {linksNote && <span className="flex-none self-center text-[11px] text-gray-600">{linksNote}</span>}
+        </div>
       </header>
+
+      <div className="max-w-6xl mx-auto px-4 pt-3">
+        <div className="panel !p-2 flex items-stretch gap-2">
+          {strip.map((s) => (
+            <div key={s.id} className="flex-1 min-w-0 text-center" title={s.sub}>
+              <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold truncate">{s.label}</div>
+              <div className="font-mono text-sm text-emerald-300 truncate">{balancesLoading ? '…' : s.value}</div>
+            </div>
+          ))}
+          <button type="button" onClick={() => loadBalances(true)} disabled={balancesLoading}
+            className="btn-secondary !min-h-[44px] flex-none" aria-label="Refresh balances" title={balancesNote || 'Refresh balances live'}>
+            <i className={`fas fa-rotate text-xs ${balancesLoading ? 'fa-spin' : ''}`}></i>
+          </button>
+        </div>
+        {balancesNote && <p className="mt-1 text-[11px] text-gray-600">{balancesNote}</p>}
+      </div>
 
       <main className="max-w-6xl mx-auto px-4 py-4 space-y-4">
         <Section icon="fa-gauge-high" title="Stats overview" defaultOpen={true}
@@ -227,45 +286,6 @@ export default function App() {
           {enhLoading
             ? <p className="text-xs text-gray-500">Loading…</p>
             : <EnhancementsList items={enhancements} />}
-        </Section>
-
-        <Section icon="fa-arrow-up-right-from-square" title="Generator apps" defaultOpen={true}
-          summary={apps.length ? `${apps.length} apps` : undefined}
-          actions={linksNote ? <Tip text={linksNote} /> : null}>
-          {apps.length ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {apps.map((l) => (
-                <a key={l.id} href={l.url} target="_blank" rel="noreferrer"
-                  className="panel !p-4 block hover:border-violet-600 min-h-[44px]">
-                  <div className="text-sm font-semibold text-gray-100">{l.title}</div>
-                  {l.desc && <p className="mt-1 text-xs text-gray-500">{l.desc}</p>}
-                  <div className="mt-2 text-xs text-violet-300">Open app <i className="fas fa-arrow-up-right-from-square text-[10px]"></i></div>
-                </a>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {[
-                { id: 'muapi', title: 'MuAPI Prompt Generator', desc: 'Image/video/audio/3D models' },
-                { id: 'replicate', title: 'Replicate Prompt Orchestrator', desc: 'Schema-driven Replicate UI + enhancer' },
-                { id: 'wavespeed', title: 'WaveSpeed Prompt Generator', desc: 'WaveSpeed catalog, R2 autosave' },
-              ].map((a) => (
-                <div key={a.id} className="panel !p-4">
-                  <div className="text-sm font-semibold text-gray-100">{a.title}</div>
-                  <p className="mt-1 text-xs text-gray-500">{a.desc}{linksNote ? ` (${linksNote})` : ''}</p>
-                </div>
-              ))}
-            </div>
-          )}
-          {!!billingLinks.length && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {billingLinks.map((l) => (
-                <a key={l.id} href={l.url} target="_blank" rel="noreferrer" className="badge hover:border-violet-500 !py-2 !px-3 min-h-[44px] inline-flex items-center">
-                  {l.title}
-                </a>
-              ))}
-            </div>
-          )}
         </Section>
       </main>
 

@@ -35,6 +35,11 @@ export async function fetchLinks() {
   return data.links || [];
 }
 
+export async function fetchBalances(refresh = false) {
+  const data = await get(`/api/balance${refresh ? '?refresh=1' : ''}`);
+  return data.balances || {};
+}
+
 export async function fetchStats() {
   return get('/api/history/stats');
 }
