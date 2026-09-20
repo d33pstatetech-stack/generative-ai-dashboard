@@ -20,22 +20,40 @@ function firstOutput(run) {
 
 const isVideo = (u) => /\.(mp4|webm|mov)(\?|$)/i.test(u || '');
 
+// Mirror the pre-rework dashboard: prefer the archived R2 copy (provider CDN
+// links expire), fall back to the provider output URL.
+function resolveMedia(run) {
+  try {
+    const keys = JSON.parse(run.r2_keys_json || '[]');
+    if (Array.isArray(keys) && keys.length) {
+      const key = String(keys[0]);
+      return {
+        url: `/api/storage/download?key=${encodeURIComponent(key)}`,
+        video: /\.(mp4|webm|mov)$/i.test(key.split('?')[0]),
+      };
+    }
+  } catch { /* fall through to CDN */ }
+  const out = firstOutput(run);
+  if (out) return { url: out, video: isVideo(out) };
+  return null;
+}
+
 // Mobile-first runs history: stacked cards on small screens, table on md+.
 export default function RunsTable({ runs, onRate, ratingBusyId }) {
   if (!runs.length) return <p className="text-xs text-gray-600 py-8 text-center">No runs match these filters.</p>;
   return (
     <div className="space-y-3">
       {runs.map((r) => {
-        const media = firstOutput(r);
+        const media = resolveMedia(r);
         const ok = r.status === 'succeeded' || r.status === 'completed';
         return (
           <article key={r.id} className="panel !p-3">
             {media ? (
-              isVideo(media) ? (
-                <video src={media} controls preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
+              media.video ? (
+                <video src={media.url} controls preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
               ) : (
-                <a href={media} target="_blank" rel="noreferrer">
-                  <img src={media} alt="" loading="lazy" className="w-full max-h-64 object-contain rounded-lg bg-black" />
+                <a href={media.url} target="_blank" rel="noreferrer">
+                  <img src={media.url} alt="" loading="lazy" className="w-full max-h-64 object-contain rounded-lg bg-black" />
                 </a>
               )
             ) : (
