@@ -163,7 +163,7 @@ export default function App() {
                   {(stats.top_rated_models || []).slice(0, 8).map((r) => (
                     <div key={r.model} className="flex justify-between gap-2 text-xs py-1 border-b border-gray-800/50 last:border-0">
                       <span className="text-gray-300 truncate">{r.model}</span>
-                      <span className="font-mono text-amber-300 flex-none">★{r.avg} ({r.c})</span>
+                      <span className="font-mono text-amber-300 flex-none">★{Number(r.avg).toFixed(1)} ({r.c})</span>
                     </div>
                   ))}
                   {!(stats.top_rated_models || []).length && <p className="text-[11px] text-gray-600">Rate runs to build this list.</p>}
