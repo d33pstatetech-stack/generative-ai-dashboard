@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { fetchBalances, fetchEnhancements, fetchHealth, fetchLinks, fetchRuns, fetchStats, rateRun } from './api';
+import { deleteCustomLora, fetchBalances, fetchCustomLoras, fetchEnhancements, fetchHealth, fetchLinks, fetchRuns, fetchStats, rateRun, saveCustomLora } from './api';
+import CustomLoraLibrary from './components/CustomLoraLibrary';
 import EnhancementsList from './components/EnhancementsList';
 import RunsTable from './components/RunsTable';
 import Section from './components/Section';
@@ -35,6 +36,33 @@ export default function App() {
   const [balances, setBalances] = useState(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
   const [balancesNote, setBalancesNote] = useState('');
+  const [customLoras, setCustomLoras] = useState([]);
+
+  const loadCustomLoras = useCallback(async () => {
+    try {
+      setCustomLoras(await fetchCustomLoras());
+    } catch (e) {
+      toast(`Custom LoRAs failed: ${e.message}`, 'error');
+    }
+  }, [toast]);
+
+  const handleAddCustom = useCallback(async (entry) => {
+    const r = await saveCustomLora(entry);
+    await loadCustomLoras();
+    toast(r.deduplicated ? 'Already in library' : `Added ${entry.name}`, r.deduplicated ? 'info' : 'success');
+    return r;
+  }, [toast, loadCustomLoras]);
+
+  const handleDeleteCustom = useCallback(async (id, name) => {
+    if (!window.confirm(`Remove custom LoRA "${name || id}"?`)) return;
+    try {
+      await deleteCustomLora(id);
+      await loadCustomLoras();
+      toast('Custom LoRA removed', 'success');
+    } catch (e) {
+      toast(`Remove failed: ${e.message}`, 'error');
+    }
+  }, [toast, loadCustomLoras]);
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -97,6 +125,7 @@ export default function App() {
       loadStats();
       loadRuns(DEFAULT_FILTERS);
       loadBalances(false);
+      loadCustomLoras();
       try {
         setEnhancements(await fetchEnhancements({}));
       } catch { /* surfaced on manual refresh */ }
@@ -286,6 +315,11 @@ export default function App() {
           {enhLoading
             ? <p className="text-xs text-gray-500">Loading…</p>
             : <EnhancementsList items={enhancements} />}
+        </Section>
+
+        <Section icon="fa-layer-group" title="LoRA library" defaultOpen={false} summary={customLoras.length ? `${customLoras.length} custom` : 'add from URL'}>
+          <p className="text-[11px] text-gray-500 mb-2">Centralized LoRA management — add from HuggingFace/CivitAI URLs once, use from every generator app. Custom entries appear in each app's pickers under a Custom group.</p>
+          <CustomLoraLibrary loras={customLoras} onAdd={handleAddCustom} onDelete={handleDeleteCustom} notify={toast} />
         </Section>
       </main>
 

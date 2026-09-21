@@ -74,3 +74,37 @@ export async function rateRun({ id, rating }) {
   if (!res.ok) throw new Error(errText(data.message || data.error, `Rate failed (${res.status})`));
   return data;
 }
+
+// Centralized Add-from-URL: resolve an HF/CivitAI model-card URL to LoRA file(s).
+export async function resolveLoraUrl(url) {
+  const res = await fetch(`${API}/api/lora/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  const data = await json(res);
+  if (!res.ok) throw new Error(errText(data.error, `Resolve failed (${res.status})`));
+  return data;
+}
+
+export async function fetchCustomLoras() {
+  return (await get('/api/loras/custom')).loras || [];
+}
+
+export async function saveCustomLora(entry) {
+  const res = await fetch(`${API}/api/loras/custom`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  });
+  const data = await json(res);
+  if (!res.ok) throw new Error(errText(data.error, `Save failed (${res.status})`));
+  return data;
+}
+
+export async function deleteCustomLora(id) {
+  const res = await fetch(`${API}/api/loras/custom/${id}`, { method: 'DELETE' });
+  const data = await json(res);
+  if (!res.ok) throw new Error(errText(data.error, `Delete failed (${res.status})`));
+  return data;
+}
