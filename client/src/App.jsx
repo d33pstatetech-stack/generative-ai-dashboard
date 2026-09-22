@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { deleteCustomLora, fetchBalances, fetchCustomLoras, fetchEnhancements, fetchHealth, fetchLinks, fetchRuns, fetchStats, rateRun, saveCustomLora } from './api';
 import CustomLoraLibrary from './components/CustomLoraLibrary';
 import Headshots from './components/Headshots';
+import MaskPainter from './components/MaskPainter';
 import EnhancementsList from './components/EnhancementsList';
 import RunsTable from './components/RunsTable';
 import Section from './components/Section';
@@ -34,6 +35,8 @@ export default function App() {
   const [enhModel, setEnhModel] = useState('');
   const [links, setLinks] = useState([]);
   const [linksNote, setLinksNote] = useState('');
+  const [enhProviders, setEnhProviders] = useState([]);
+  const [enhMedia, setEnhMedia] = useState('all');
   const [balances, setBalances] = useState(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
   const [balancesNote, setBalancesNote] = useState('');
@@ -92,7 +95,7 @@ export default function App() {
   const loadEnhancements = useCallback(async () => {
     setEnhLoading(true);
     try {
-      setEnhancements(await fetchEnhancements({ model_like: enhModel.trim() }));
+      setEnhancements(await fetchEnhancements({ model_like: enhModel.trim(), limit: 200 }));
     } catch (e) {
       toast(`Enhancements failed: ${e.message}`, 'error');
     } finally {
@@ -128,7 +131,7 @@ export default function App() {
       loadBalances(false);
       loadCustomLoras();
       try {
-        setEnhancements(await fetchEnhancements({}));
+        setEnhancements(await fetchEnhancements({ limit: 200 }));
       } catch { /* surfaced on manual refresh */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,9 +151,30 @@ export default function App() {
     }
   }, [toast, loadStats]);
 
+  const mediaOf = (m) => (/video|wan|h3|hailuo|kling|ltx|seedance|pixverse|vidu|sora|veo|avatar|lipsync|heygen|animate|moond|hunyuan/i.test(m || '') ? 'video' : 'image');
+  const enhProvAvail = [...new Set(enhancements.map((e) => e.target_provider || e.source_app).filter(Boolean))].sort();
+  const shownEnh = enhancements.filter((e) => {
+    const p = e.target_provider || e.source_app || '';
+    if (enhProviders.length && !enhProviders.includes(p)) return false;
+    if (enhMedia !== 'all' && mediaOf(e.target_model) !== enhMedia) return false;
+    return true;
+  });
+  const toggleProv = (p) => setEnhProviders((s) => (s.includes(p) ? s.filter((x) => x !== p) : [...s, p]));
+
+  const TOOLS = [
+    ['sec-stats', 'Stats', 'fa-gauge-high'],
+    ['sec-enh', 'Enhancements', 'fa-wand-magic-sparkles'],
+    ['sec-loras', 'LoRAs', 'fa-layer-group'],
+    ['sec-headshots', 'Headshots', 'fa-scissors'],
+    ['sec-mask', 'Mask', 'fa-paintbrush'],
+    ['sec-billing', 'Billing', 'fa-credit-card'],
+    ['sec-runs', 'Runs', 'fa-clock-rotate-left'],
+  ];
+  const jump = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
   const apps = links.filter((l) => l.kind === 'app');
-  const billingLinks = links.filter((l) => l.kind === 'billing' || l.kind === 'data');
+  // Billing page owns billing links; RunPod entries retired.
+  const billingLinks = links.filter((l) => l.kind === 'billing' && !l.id.startsWith('runpod'));
   const fallbackApps = [
     { id: 'muapi', title: 'MuAPI', url: 'https://muapi-prompt-generator.d33pstatetech.workers.dev' },
     { id: 'replicate', title: 'Replicate', url: 'https://replicate-prompt-orchestrator.d33pstatetech.workers.dev' },
@@ -186,15 +210,18 @@ export default function App() {
               {l.title} <i className="fas fa-arrow-up-right-from-square text-[10px] ml-1"></i>
             </a>
           ))}
-          {billingLinks.map((l) => (
-            <a key={l.id} href={l.url} target="_blank" rel="noreferrer" title={l.title}
-              className="flex-none text-[11px] px-2 min-h-[44px] inline-flex items-center rounded-lg border border-gray-700 text-gray-400 hover:border-violet-500 hover:text-gray-200 max-w-[140px] truncate">
-              {l.title}
-            </a>
-          ))}
           {linksNote && <span className="flex-none self-center text-[11px] text-gray-600">{linksNote}</span>}
         </div>
       </header>
+
+      <div className="max-w-6xl mx-auto px-4 pt-2 flex gap-1.5 overflow-x-auto" role="navigation" aria-label="Tools">
+        {TOOLS.map(([id, label, icon]) => (
+          <button key={id} type="button" onClick={() => jump(id)}
+            className="flex-none text-[11px] px-2.5 min-h-[44px] inline-flex items-center gap-1.5 rounded-lg border border-gray-700 text-gray-300 hover:border-violet-500 hover:text-white">
+            <i className={`fas ${icon} text-[10px] text-violet-300`}></i>{label}
+          </button>
+        ))}
+      </div>
 
       <div className="max-w-6xl mx-auto px-4 pt-3">
         <div className="panel !p-2 flex items-stretch gap-2">
@@ -213,7 +240,7 @@ export default function App() {
       </div>
 
       <main className="max-w-6xl mx-auto px-4 py-4 space-y-4">
-        <Section icon="fa-gauge-high" title="Stats overview" defaultOpen={true}
+        <Section id="sec-stats" icon="fa-gauge-high" title="Stats overview" defaultOpen={true}
           summary={stats ? `${stats.runs} runs` : undefined}
           actions={<button type="button" onClick={loadStats} className="btn-secondary !min-h-[44px]" aria-label="Refresh stats"><i className="fas fa-rotate text-xs"></i></button>}>
           {statsLoading ? (
@@ -264,7 +291,73 @@ export default function App() {
           )}
         </Section>
 
-        <Section icon="fa-clock-rotate-left" title="Runs history" defaultOpen={true} summary={`${runs.length} shown`}>
+        <Section id="sec-enh" icon="fa-wand-magic-sparkles" title="Enhancements" defaultOpen={false} summary={`${shownEnh.length}/${enhancements.length} shown`}>
+          <div className="flex gap-2 mb-2">
+            <input className="input flex-1" value={enhModel} onChange={(e) => setEnhModel(e.target.value)} placeholder="target model contains…" aria-label="Enhancement model filter" />
+            <button type="button" onClick={loadEnhancements} disabled={enhLoading} className="btn-primary-sm flex-none">
+              {enhLoading ? '…' : 'Search'}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mb-1" role="group" aria-label="Provider filter">
+            {enhProvAvail.map((p) => (
+              <button key={p} type="button" onClick={() => toggleProv(p)} aria-pressed={enhProviders.includes(p)}
+                className={`text-[11px] px-2.5 min-h-[44px] rounded-full border ${enhProviders.includes(p) ? 'bg-violet-600 border-violet-500 text-white' : 'border-gray-700 text-gray-400'}`}>
+                {p}
+              </button>
+            ))}
+            {!!enhProviders.length && (
+              <button type="button" onClick={() => setEnhProviders([])} className="text-[11px] px-2 min-h-[44px] text-gray-500 underline">
+                clear
+              </button>
+            )}
+          </div>
+          <div className="flex gap-1.5 mb-3" role="group" aria-label="Media type filter">
+            {['all', 'image', 'video'].map((m) => (
+              <button key={m} type="button" onClick={() => setEnhMedia(m)} aria-pressed={enhMedia === m}
+                className={`text-[11px] px-3 min-h-[44px] rounded-full border capitalize ${enhMedia === m ? 'bg-violet-600 border-violet-500 text-white' : 'border-gray-700 text-gray-400'}`}>
+                {m === 'all' ? 'image + video' : m}
+              </button>
+            ))}
+          </div>
+          {enhLoading
+            ? <p className="text-xs text-gray-500">Loading…</p>
+            : <EnhancementsList items={shownEnh} />}
+        </Section>
+
+        <Section id="sec-loras" icon="fa-layer-group" title="LoRA library" defaultOpen={false} summary={customLoras.length ? `${customLoras.length} custom` : 'add from URL'}>
+          <p className="text-[11px] text-gray-500 mb-2">Centralized LoRA management — add from HuggingFace/CivitAI URLs once, use from every generator app. Custom entries appear in each app's pickers under a Custom group.</p>
+          <CustomLoraLibrary loras={customLoras} onAdd={handleAddCustom} onDelete={handleDeleteCustom} notify={toast} />
+        </Section>
+
+        <Section id="sec-headshots" icon="fa-scissors" title="Headshot splitter" defaultOpen={false} summary="3×3 · 3×2 → headshots/">
+          <p className="text-[11px] text-gray-500 mb-2">Split character reference sheets into tiles. Source is archived to <span className="font-mono">headshots/sources/</span>, tiles land in <span className="font-mono">headshots/&lt;prefix&gt;_N.jpg</span> — same layout as <span className="font-mono">magick in.jpg -crop 3x3@ +repage +adjoin</span>.</p>
+          <Headshots notify={toast} />
+        </Section>
+
+        <Section id="sec-mask" icon="fa-paintbrush" title="Inpaint mask painter" defaultOpen={false} summary="paint → masks/">
+          <p className="text-[11px] text-gray-500 mb-2">Paint the area to inpaint (red). Export is a full-resolution B/W mask: black = remove, white = keep. Save straight to <span className="font-mono">masks/</span> in R2.</p>
+          <MaskPainter notify={toast} />
+        </Section>
+
+        <Section id="sec-billing" icon="fa-credit-card" title="Billing" defaultOpen={false}
+          summary={billingLinks.length ? `${billingLinks.length} links` : undefined}>
+          {billingLinks.length ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {billingLinks.map((l) => (
+                <a key={l.id} href={l.url} target="_blank" rel="noreferrer"
+                  className="panel !p-4 block hover:border-violet-600 min-h-[44px]">
+                  <div className="text-sm font-semibold text-gray-100">{l.title}</div>
+                  {l.desc && <p className="mt-1 text-xs text-gray-500">{l.desc}</p>}
+                  <div className="mt-2 text-xs text-violet-300">Open billing <i className="fas fa-arrow-up-right-from-square text-[10px]"></i></div>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-600">No billing links available{linksNote ? ` (${linksNote})` : ''}.</p>
+          )}
+        </Section>
+
+        <Section id="sec-runs" icon="fa-clock-rotate-left" title="Runs history" defaultOpen={true} summary={`${runs.length} shown`}>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
             <select className="input" value={filters.provider} onChange={set('provider')} aria-label="Provider filter">
               <option value="">all providers</option>
@@ -304,28 +397,6 @@ export default function App() {
           {runsLoading
             ? <p className="text-xs text-gray-500 flex items-center gap-2"><span className="spinner !border-gray-600"></span>Loading runs…</p>
             : <RunsTable runs={runs} onRate={handleRate} ratingBusyId={ratingBusyId} />}
-        </Section>
-
-        <Section icon="fa-wand-magic-sparkles" title="Enhancements" defaultOpen={false} summary={`${enhancements.length} shown`}>
-          <div className="flex gap-2 mb-3">
-            <input className="input flex-1" value={enhModel} onChange={(e) => setEnhModel(e.target.value)} placeholder="target model contains…" aria-label="Enhancement model filter" />
-            <button type="button" onClick={loadEnhancements} disabled={enhLoading} className="btn-primary-sm flex-none">
-              {enhLoading ? '…' : 'Search'}
-            </button>
-          </div>
-          {enhLoading
-            ? <p className="text-xs text-gray-500">Loading…</p>
-            : <EnhancementsList items={enhancements} />}
-        </Section>
-
-        <Section icon="fa-layer-group" title="LoRA library" defaultOpen={false} summary={customLoras.length ? `${customLoras.length} custom` : 'add from URL'}>
-          <p className="text-[11px] text-gray-500 mb-2">Centralized LoRA management — add from HuggingFace/CivitAI URLs once, use from every generator app. Custom entries appear in each app's pickers under a Custom group.</p>
-          <CustomLoraLibrary loras={customLoras} onAdd={handleAddCustom} onDelete={handleDeleteCustom} notify={toast} />
-        </Section>
-
-        <Section icon="fa-scissors" title="Headshot splitter" defaultOpen={false} summary="3×3 · 3×2 → headshots/">
-          <p className="text-[11px] text-gray-500 mb-2">Split character reference sheets into tiles. Source is archived to <span className="font-mono">headshots/sources/</span>, tiles land in <span className="font-mono">headshots/&lt;prefix&gt;_N.jpg</span> — same layout as <span className="font-mono">magick in.jpg -crop 3x3@ +repage +adjoin</span>.</p>
-          <Headshots notify={toast} />
         </Section>
       </main>
 
