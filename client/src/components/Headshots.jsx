@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { storageList, storageUpload } from '../api';
-import { computeTiles } from '../tiling';
+import { computeTiles, computeTilesPercent } from '../tiling';
 
 const PRESETS = [
-  { id: '3x3', cols: 3, rows: 3, label: '3×3 — 9 headshots (3 rows × 3 cols)' },
-  { id: '3x2', cols: 3, rows: 2, label: '3×2 — 6 shots (2 rows × 3 cols)' },
+  { id: '3x3', mode: 'grid', cols: 3, rows: 3, label: '3×3 — 9 headshots (3 rows × 3 cols)' },
+  { id: '3x2', mode: 'grid', cols: 3, rows: 2, label: '3×2 — 6 shots (2 rows × 3 cols)' },
+  { id: '1x3', mode: 'grid', cols: 3, rows: 1, label: '1×3 — full body (1 row × 3 cols)' },
+  { id: '1x4', mode: 'percent', label: '1×4 — full body, adjustable (front · left · right · back)' },
 ];
+const QUARTERS = ['front', 'left profile', 'right profile', 'back'];
 
 const sanitize = (n) => String(n || 'source.jpg').replace(/[^a-z0-9._-]+/gi, '_').slice(0, 120);
 
@@ -43,13 +46,20 @@ function thumbUrl(img, t, max = 160) {
 export default function Headshots({ notify }) {
   const [src, setSrc] = useState(null); // {img,w,h,url,fileName}
   const [preset, setPreset] = useState(PRESETS[0]);
+  const [cuts, setCuts] = useState([0.3, 0.5, 0.7]); // 1x4 divider fractions
   const [prefix, setPrefix] = useState('headshot');
   const [thumbs, setThumbs] = useState([]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [outputs, setOutputs] = useState([]);
 
-  const tiles = src ? computeTiles(src.w, src.h, preset.cols, preset.rows) : [];
+  const tiles = src
+    ? preset.mode === 'percent'
+      ? computeTilesPercent(src.w, src.h, cuts)
+      : computeTiles(src.w, src.h, preset.cols, preset.rows)
+    : [];
+  const tileCount = tiles.length;
+  const captions = preset.id === '1x4' ? QUARTERS : [];
 
   const pick = async (file) => {
     if (!file) return;
@@ -63,9 +73,22 @@ export default function Headshots({ notify }) {
     }
   };
 
-  const preview = () => {
+  const preview = (rects = tiles) => {
     if (!src) return;
-    setThumbs(tiles.map((t) => thumbUrl(src.img, t)));
+    setThumbs(rects.map((t) => thumbUrl(src.img, t)));
+  };
+
+  // Re-preview live while dragging dividers.
+  const adjustCut = (i, v) => {
+    const lo = i === 0 ? 0.05 : cuts[i - 1] + 0.03;
+    const hi = i === cuts.length - 1 ? 0.95 : cuts[i + 1] - 0.03;
+    const cv = Math.min(hi, Math.max(lo, v));
+    const next = [...cuts];
+    next[i] = cv;
+    setCuts(next);
+    if (src && thumbs.length) {
+      setThumbs(computeTilesPercent(src.w, src.h, next).map((t) => thumbUrl(src.img, t)));
+    }
   };
 
   const splitSave = async () => {
@@ -129,20 +152,34 @@ export default function Headshots({ notify }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={preview} className="btn-secondary">Preview tiles</button>
+            <button type="button" onClick={() => preview()} className="btn-secondary">Preview tiles</button>
             <button type="button" onClick={splitSave} disabled={busy} className="btn-primary-sm">
-              {busy ? 'Working…' : `Split ${preset.cols * preset.rows} & save to R2`}
+              {busy ? 'Working…' : `Split ${tileCount} & save to R2`}
             </button>
           </div>
+          {preset.mode === 'percent' && (
+            <div className="panel !p-3 space-y-2">
+              <p className="text-[11px] text-gray-500">Drag dividers to match the sheet — front/back are usually wider than the profiles.</p>
+              {cuts.map((c, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-[10px] text-gray-500 w-14 flex-none">cut {i + 1}</span>
+                  <input type="range" min={2} max={98} step={0.5} value={Math.round(c * 100)}
+                    onChange={(e) => adjustCut(i, Number(e.target.value) / 100)}
+                    className="flex-1 accent-purple-500 min-h-[44px]" aria-label={`Divider ${i + 1} percent`} />
+                  <span className="text-[11px] font-mono text-gray-300 w-12 text-right flex-none">{Math.round(c * 100)}%</span>
+                </div>
+              ))}
+            </div>
+          )}
           {progress && <p className="text-[11px] text-gray-400">{progress}</p>}
 
           {!!thumbs.length && (
-            <div className="grid grid-cols-3 gap-1.5" style={{ maxWidth: 520 }}>
+            <div className="grid gap-1.5" style={{ maxWidth: 640, gridTemplateColumns: `repeat(${Math.min(thumbs.length, 4)}, minmax(0,1fr))` }}>
               {thumbs.map((u, i) => (
                 <figure key={i} className="relative rounded overflow-hidden bg-black">
                   <img src={u} alt={`tile ${i}`} loading="lazy" className="w-full block" />
                   <figcaption className="absolute bottom-0.5 right-1 text-[10px] font-mono text-white bg-black/60 px-1 rounded">
-                    {prefix.trim() || 'headshot'}_{i}.jpg
+                    {captions[i] ? `${captions[i]} · ` : ''}{prefix.trim() || 'headshot'}_{i}.jpg
                   </figcaption>
                 </figure>
               ))}
