@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { deleteCustomLora, fetchBalances, fetchCustomLoras, fetchEnhancements, fetchHealth, fetchLinks, fetchRuns, fetchStats, rateRun, saveCustomLora } from './api';
 import CustomLoraLibrary from './components/CustomLoraLibrary';
+import Headshots from './components/Headshots';
 import EnhancementsList from './components/EnhancementsList';
 import RunsTable from './components/RunsTable';
 import Section from './components/Section';
@@ -320,6 +321,11 @@ export default function App() {
         <Section icon="fa-layer-group" title="LoRA library" defaultOpen={false} summary={customLoras.length ? `${customLoras.length} custom` : 'add from URL'}>
           <p className="text-[11px] text-gray-500 mb-2">Centralized LoRA management — add from HuggingFace/CivitAI URLs once, use from every generator app. Custom entries appear in each app's pickers under a Custom group.</p>
           <CustomLoraLibrary loras={customLoras} onAdd={handleAddCustom} onDelete={handleDeleteCustom} notify={toast} />
+        </Section>
+
+        <Section icon="fa-scissors" title="Headshot splitter" defaultOpen={false} summary="3×3 · 3×2 → headshots/">
+          <p className="text-[11px] text-gray-500 mb-2">Split character reference sheets into tiles. Source is archived to <span className="font-mono">headshots/sources/</span>, tiles land in <span className="font-mono">headshots/&lt;prefix&gt;_N.jpg</span> — same layout as <span className="font-mono">magick in.jpg -crop 3x3@ +repage +adjoin</span>.</p>
+          <Headshots notify={toast} />
         </Section>
       </main>
 

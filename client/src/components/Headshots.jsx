@@ -1,0 +1,174 @@
+import { useState } from 'react';
+import { storageList, storageUpload } from '../api';
+import { computeTiles } from '../tiling';
+
+const PRESETS = [
+  { id: '3x3', cols: 3, rows: 3, label: '3×3 — 9 headshots (3 rows × 3 cols)' },
+  { id: '3x2', cols: 3, rows: 2, label: '3×2 — 6 shots (2 rows × 3 cols)' },
+];
+
+const sanitize = (n) => String(n || 'source.jpg').replace(/[^a-z0-9._-]+/gi, '_').slice(0, 120);
+
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => resolve({ img, w: img.naturalWidth, h: img.naturalHeight, url });
+    img.onerror = () => reject(new Error('Could not decode image'));
+    img.src = url;
+  });
+}
+
+function tileBlob(img, t) {
+  return new Promise((resolve, reject) => {
+    const c = document.createElement('canvas');
+    c.width = t.w;
+    c.height = t.h;
+    c.getContext('2d').drawImage(img, t.x, t.y, t.w, t.h, 0, 0, t.w, t.h);
+    c.toBlob((b) => (b ? resolve(b) : reject(new Error('Tile encode failed'))), 'image/jpeg', 0.92);
+  });
+}
+
+function thumbUrl(img, t, max = 160) {
+  const s = Math.min(1, max / Math.max(t.w, t.h));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(t.w * s));
+  c.height = Math.max(1, Math.round(t.h * s));
+  c.getContext('2d').drawImage(img, t.x, t.y, t.w, t.h, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.8);
+}
+
+// Headshot sheet splitter: 3x3 / 3x2 reference grids → headshots/ in R2.
+// Equivalent to: magick in.jpg -crop 3x3@ +repage +adjoin headshot_%d.jpg
+export default function Headshots({ notify }) {
+  const [src, setSrc] = useState(null); // {img,w,h,url,fileName}
+  const [preset, setPreset] = useState(PRESETS[0]);
+  const [prefix, setPrefix] = useState('headshot');
+  const [thumbs, setThumbs] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [outputs, setOutputs] = useState([]);
+
+  const tiles = src ? computeTiles(src.w, src.h, preset.cols, preset.rows) : [];
+
+  const pick = async (file) => {
+    if (!file) return;
+    try {
+      const loaded = await loadImage(file);
+      setSrc({ ...loaded, file, fileName: file.name });
+      setOutputs([]);
+      setProgress('');
+    } catch (e) {
+      notify && notify(e.message, 'error');
+    }
+  };
+
+  const preview = () => {
+    if (!src) return;
+    setThumbs(tiles.map((t) => thumbUrl(src.img, t)));
+  };
+
+  const splitSave = async () => {
+    if (!src) return;
+    const pre = (prefix.trim() || 'headshot').replace(/[^a-z0-9_-]+/gi, '_');
+    setBusy(true);
+    try {
+      // 1. source → headshots/sources/
+      const srcKey = `headshots/sources/${sanitize(src.fileName)}`;
+      setProgress('Uploading source…');
+      await storageUpload(srcKey, src.file, src.file.type || 'image/jpeg');
+      // 2. tiles → headshots/<prefix>_<i>.jpg
+      const done = [];
+      for (let i = 0; i < tiles.length; i++) {
+        setProgress(`Saving tile ${i + 1}/${tiles.length}…`);
+        const blob = await tileBlob(src.img, tiles[i]);
+        const key = `headshots/${pre}_${i}.jpg`;
+        await storageUpload(key, blob, 'image/jpeg');
+        done.push(key);
+      }
+      // 3. review output dir
+      setProgress('Listing headshots/…');
+      const listed = await storageList('headshots/');
+      setOutputs(listed);
+      setProgress(`Done — ${done.length} tiles + source saved.`);
+      notify && notify(`Split ${tiles.length} tiles → headshots/`, 'success');
+    } catch (e) {
+      setProgress('');
+      notify && notify(`Split failed: ${e.message}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2 items-center">
+        <label className="btn-secondary cursor-pointer">
+          Choose sheet image
+          <input type="file" accept="image/*" className="hidden" aria-label="Sheet image"
+            onChange={(e) => pick(e.target.files?.[0])} />
+        </label>
+        {src && (
+          <span className="text-[11px] text-gray-400">
+            {src.fileName} · {src.w}×{src.h}px
+          </span>
+        )}
+      </div>
+
+      {src && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {PRESETS.map((p) => (
+              <button key={p.id} type="button" onClick={() => { setPreset(p); setThumbs([]); }}
+                className={preset.id === p.id ? 'btn-primary-sm' : 'btn-secondary'} aria-pressed={preset.id === p.id}>
+                {p.label}
+              </button>
+            ))}
+            <input className="input !w-36" value={prefix} onChange={(e) => setPrefix(e.target.value)}
+              placeholder="headshot" aria-label="Output prefix" title="Output files: headshots/<prefix>_N.jpg" />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={preview} className="btn-secondary">Preview tiles</button>
+            <button type="button" onClick={splitSave} disabled={busy} className="btn-primary-sm">
+              {busy ? 'Working…' : `Split ${preset.cols * preset.rows} & save to R2`}
+            </button>
+          </div>
+          {progress && <p className="text-[11px] text-gray-400">{progress}</p>}
+
+          {!!thumbs.length && (
+            <div className="grid grid-cols-3 gap-1.5" style={{ maxWidth: 520 }}>
+              {thumbs.map((u, i) => (
+                <figure key={i} className="relative rounded overflow-hidden bg-black">
+                  <img src={u} alt={`tile ${i}`} loading="lazy" className="w-full block" />
+                  <figcaption className="absolute bottom-0.5 right-1 text-[10px] font-mono text-white bg-black/60 px-1 rounded">
+                    {prefix.trim() || 'headshot'}_{i}.jpg
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+
+          {!!outputs.length && (
+            <div className="panel !p-3">
+              <h3 className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-2">
+                headshots/ — {outputs.length} objects
+              </h3>
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {outputs.map((o) => (
+                  <div key={o.key} className="flex justify-between gap-2 text-[11px] font-mono">
+                    <a className="text-gray-300 truncate hover:text-violet-300"
+                      href={`/api/storage/download?key=${encodeURIComponent(o.key)}`} target="_blank" rel="noreferrer" title={o.key}>
+                      {o.key}
+                    </a>
+                    <span className="text-gray-500 flex-none">{(o.size / 1024).toFixed(1)} KB</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

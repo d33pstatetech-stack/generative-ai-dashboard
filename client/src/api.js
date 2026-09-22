@@ -108,3 +108,21 @@ export async function deleteCustomLora(id) {
   if (!res.ok) throw new Error(errText(data.error, `Delete failed (${res.status})`));
   return data;
 }
+
+// R2 storage browser primitives (headshots tool + power users).
+export async function storageUpload(key, blob, contentType) {
+  const res = await fetch(`${API}/api/storage/upload?key=${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': contentType || blob?.type || 'application/octet-stream' },
+    body: blob,
+  });
+  const data = await json(res);
+  if (!res.ok) throw new Error(errText(data.error, `Upload failed (${res.status})`));
+  return data; // { ok, key, size }
+}
+
+export async function storageList(prefix = '') {
+  const q = new URLSearchParams({ prefix, recursive: '1' });
+  const data = await get(`/api/storage/list?${q.toString()}`);
+  return Array.isArray(data.objects) ? data.objects : [];
+}
