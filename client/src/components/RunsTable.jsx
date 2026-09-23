@@ -10,32 +10,30 @@ function promptOf(run) {
   }
 }
 
-function firstOutput(run) {
+function parseArr(v) {
   try {
-    const urls = JSON.parse(run.output_urls_json || '[]');
-    if (Array.isArray(urls) && urls.length) return urls[0];
-  } catch { /* ignore */ }
-  return null;
+    const a = JSON.parse(v || '[]');
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
 }
 
 const isVideo = (u) => /\.(mp4|webm|mov)(\?|$)/i.test(u || '');
+const isVideoKey = (k) => /\.(mp4|webm|mov)$/i.test(String(k || '').split('?')[0]);
 
-// Mirror the pre-rework dashboard: prefer the archived R2 copy (provider CDN
-// links expire), fall back to the provider output URL.
-function resolveMedia(run) {
-  try {
-    const keys = JSON.parse(run.r2_keys_json || '[]');
-    if (Array.isArray(keys) && keys.length) {
-      const key = String(keys[0]);
-      return {
-        url: `/api/storage/download?key=${encodeURIComponent(key)}`,
-        video: /\.(mp4|webm|mov)$/i.test(key.split('?')[0]),
-      };
-    }
-  } catch { /* fall through to CDN */ }
-  const out = firstOutput(run);
-  if (out) return { url: out, video: isVideo(out) };
-  return null;
+// Mirror the pre-rework dashboard: prefer archived R2 copies (provider CDN
+// links expire), fall back to provider output URLs — for ALL outputs, not
+// just the first.
+function resolveAllMedia(run) {
+  const keys = parseArr(run.r2_keys_json).map(String).filter(Boolean);
+  if (keys.length) {
+    return keys.map((key) => ({
+      url: `/api/storage/download?key=${encodeURIComponent(key)}`,
+      video: isVideoKey(key),
+    }));
+  }
+  return parseArr(run.output_urls_json).map(String).filter(Boolean).map((url) => ({ url, video: isVideo(url) }));
 }
 
 // Mobile-first runs history: stacked cards on small screens, table on md+.
@@ -44,18 +42,22 @@ export default function RunsTable({ runs, onRate, ratingBusyId }) {
   return (
     <div className="space-y-3">
       {runs.map((r) => {
-        const media = resolveMedia(r);
+        const media = resolveAllMedia(r);
         const ok = r.status === 'succeeded' || r.status === 'completed';
         return (
           <article key={r.id} className="panel !p-3">
-            {media ? (
-              media.video ? (
-                <video src={media.url} controls preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
-              ) : (
-                <a href={media.url} target="_blank" rel="noreferrer">
-                  <img src={media.url} alt="" loading="lazy" className="w-full max-h-64 object-contain rounded-lg bg-black" />
-                </a>
-              )
+            {media.length ? (
+              <div className={`grid gap-1.5 ${media.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {media.map((m, i) => (
+                  m.video ? (
+                    <video key={i} src={m.url} controls preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
+                  ) : (
+                    <a key={i} href={m.url} target="_blank" rel="noreferrer">
+                      <img src={m.url} alt="" loading="lazy" className="w-full max-h-64 object-contain rounded-lg bg-black" />
+                    </a>
+                  )
+                ))}
+              </div>
             ) : (
               <p className="text-xs text-gray-600">No media saved.</p>
             )}
