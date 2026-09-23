@@ -126,3 +126,17 @@ export async function storageList(prefix = '') {
   const data = await get(`/api/storage/list?${q.toString()}`);
   return Array.isArray(data.objects) ? data.objects : [];
 }
+
+// Folder browsing (non-recursive): returns { folders, objects, truncated, cursor }.
+export async function storageBrowse(prefix = '', cursor = null) {
+  const q = new URLSearchParams({ prefix, delimiter: '/' });
+  if (cursor) q.set('cursor', cursor);
+  return get(`/api/storage/list?${q.toString()}`);
+}
+
+export async function storageDelete(key) {
+  const res = await fetch(`${API}/api/storage/object?key=${encodeURIComponent(key)}`, { method: 'DELETE' });
+  const data = await json(res);
+  if (!res.ok) throw new Error(errText(data.error, `Delete failed (${res.status})`));
+  return data;
+}

@@ -3,6 +3,7 @@ import { deleteCustomLora, fetchBalances, fetchCustomLoras, fetchEnhancements, f
 import CustomLoraLibrary from './components/CustomLoraLibrary';
 import Headshots from './components/Headshots';
 import MaskPainter from './components/MaskPainter';
+import StorageBrowser from './components/StorageBrowser';
 import EnhancementsList from './components/EnhancementsList';
 import RunsTable from './components/RunsTable';
 import Section from './components/Section';
@@ -167,6 +168,7 @@ export default function App() {
     ['sec-loras', 'LoRAs', 'fa-layer-group'],
     ['sec-headshots', 'Headshots', 'fa-scissors'],
     ['sec-mask', 'Mask', 'fa-paintbrush'],
+    ['sec-files', 'Files', 'fa-folder-open'],
     ['sec-billing', 'Billing', 'fa-credit-card'],
     ['sec-runs', 'Runs', 'fa-clock-rotate-left'],
   ];
@@ -339,6 +341,11 @@ export default function App() {
         <Section id="sec-mask" icon="fa-paintbrush" title="Inpaint mask painter" defaultOpen={false} summary="paint → masks/">
           <p className="text-[11px] text-gray-500 mb-2">Paint the area to inpaint (red). Export is a full-resolution B/W mask: black = remove, white = keep. Save straight to <span className="font-mono">masks/</span> in R2.</p>
           <MaskPainter notify={toast} />
+        </Section>
+
+        <Section id="sec-files" icon="fa-folder-open" title="File browser" defaultOpen={false} summary="browse · upload · delete">
+          <p className="text-[11px] text-gray-500 mb-2">Browse every folder in R2 — not just run outputs. Upload from your PC into the current folder, tick multiple files and delete them together.</p>
+          <StorageBrowser notify={toast} />
         </Section>
 
         <Section id="sec-billing" icon="fa-credit-card" title="Billing" defaultOpen={false}
