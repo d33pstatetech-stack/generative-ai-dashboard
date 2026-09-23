@@ -192,15 +192,17 @@ export default function App() {
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <header className="border-b border-gray-800 sticky top-0 z-30 bg-gray-950/90 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-none">
-            <i className="fas fa-chart-simple text-white text-sm"></i>
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-base font-bold gradient-text truncate">Generative AI Dashboard</h1>
-            <p className="text-[11px] text-gray-500 truncate">
-              {health ? `worker ok · ${health.version || '?'} · db:${health.bindings?.db ? 'yes' : 'no'} r2:${health.bindings?.r2 ? 'yes' : 'no'}` : 'stats · history · links hub'}
-            </p>
-          </div>
+          <a href="/" className="flex items-center gap-3 min-w-0" title="Back to dashboard home">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-none">
+              <i className="fas fa-chart-simple text-white text-sm"></i>
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base font-bold gradient-text truncate">Generative AI Dashboard</h1>
+              <p className="text-[11px] text-gray-500 truncate">
+                {health ? `worker ok · ${health.version || '?'} · db:${health.bindings?.db ? 'yes' : 'no'} r2:${health.bindings?.r2 ? 'yes' : 'no'}` : 'stats · history · links hub'}
+              </p>
+            </div>
+          </a>
           <span className={`ml-auto w-2 h-2 rounded-full flex-none ${health ? 'bg-emerald-500' : 'bg-gray-600'}`} title={health ? 'Connected' : 'Unknown'}></span>
         </div>
         <div className="max-w-6xl mx-auto px-4 pb-2 flex gap-2 overflow-x-auto">
