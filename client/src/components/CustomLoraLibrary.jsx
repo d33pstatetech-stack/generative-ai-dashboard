@@ -1,10 +1,15 @@
 import AddLoraUrl from './AddLoraUrl';
 
-// Centralized LoRA library: add-from-URL + full custom list (both SFW and NSFW).
+// Centralized LoRA library: add-from-URL + full custom list (Aznten / Misc / NSFW).
+// Same name-pattern rule as the generator apps: aznten / asian-ten / d33pstate
+// variants are yours regardless of source; the rest (non-NSFW) is Misc.
 // Props: loras, onAdd(entry), onDelete(id, name), notify.
+const AZNTEN_RE = /aznten|asian[- ]ten|d33pstate/i;
 export default function CustomLoraLibrary({ loras, onAdd, onDelete, notify }) {
   const list = Array.isArray(loras) ? loras : [];
   const sfw = list.filter((l) => !l.nsfw);
+  const aznten = sfw.filter((l) => AZNTEN_RE.test(`${l.name || ''} ${l.id || ''}`));
+  const misc = sfw.filter((l) => !AZNTEN_RE.test(`${l.name || ''} ${l.id || ''}`));
   const nsfw = list.filter((l) => !!l.nsfw);
 
   const card = (l) => (
@@ -35,10 +40,16 @@ export default function CustomLoraLibrary({ loras, onAdd, onDelete, notify }) {
       {list.length === 0 && (
         <p className="text-[11px] text-gray-600">No custom LoRAs yet — paste a HuggingFace or CivitAI model-card URL above.</p>
       )}
-      {sfw.length > 0 && (
+      {aznten.length > 0 && (
         <div className="space-y-2">
-          <div className="text-[11px] font-bold text-gray-300 px-1">Library ({sfw.length})</div>
-          {sfw.map(card)}
+          <div className="text-[11px] font-bold text-fuchsia-300 px-1">Aznten ({aznten.length}) — my custom trained</div>
+          {aznten.map(card)}
+        </div>
+      )}
+      {misc.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-[11px] font-bold text-gray-300 px-1">Misc ({misc.length})</div>
+          {misc.map(card)}
         </div>
       )}
       {nsfw.length > 0 && (
