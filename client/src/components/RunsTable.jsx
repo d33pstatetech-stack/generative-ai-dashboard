@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import MediaViewer from './MediaViewer';
 import Stars from './Stars';
 
 function promptOf(run) {
@@ -38,6 +40,7 @@ function resolveAllMedia(run) {
 
 // Mobile-first runs history: stacked cards on small screens, table on md+.
 export default function RunsTable({ runs, onRate, ratingBusyId }) {
+  const [viewer, setViewer] = useState(null); // { media, run } | null
   if (!runs.length) return <p className="text-xs text-gray-600 py-8 text-center">No runs match these filters.</p>;
   return (
     <div className="space-y-3">
@@ -50,11 +53,26 @@ export default function RunsTable({ runs, onRate, ratingBusyId }) {
               <div className={`grid gap-1.5 ${media.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 {media.map((m, i) => (
                   m.video ? (
-                    <video key={i} src={m.url} controls preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
+                    <div key={i} className="relative group">
+                      <video src={m.url} controls preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
+                      <button type="button" onClick={() => setViewer({ media: m, run: r })}
+                        className="absolute top-1.5 right-1.5 text-[11px] px-2 min-h-[36px] rounded-lg bg-black/70 border border-gray-700 text-gray-200 opacity-0 group-hover:opacity-100 focus:opacity-100 max-md:opacity-100 hover:border-violet-500 hover:text-white"
+                        title="Open in viewer" aria-label={`Open video ${i + 1} in viewer`}>
+                        <i className="fas fa-expand mr-1"></i>Viewer
+                      </button>
+                    </div>
                   ) : (
-                    <a key={i} href={m.url} target="_blank" rel="noreferrer">
-                      <img src={m.url} alt="" loading="lazy" className="w-full max-h-64 object-contain rounded-lg bg-black" />
-                    </a>
+                    <div key={i} className="relative group">
+                      <button type="button" onClick={() => setViewer({ media: m, run: r })}
+                        className="block w-full cursor-zoom-in rounded-lg overflow-hidden border border-transparent hover:border-violet-500 transition"
+                        title="Open in viewer" aria-label={`Open image ${i + 1} in viewer`}>
+                        <img src={m.url} alt="" loading="lazy" className="w-full max-h-64 object-contain rounded-lg bg-black" />
+                      </button>
+                      <a href={m.url} target="_blank" rel="noreferrer" title="Open original in new tab"
+                        className="absolute top-1.5 right-1.5 text-[11px] px-2 min-h-[36px] inline-flex items-center rounded-lg bg-black/70 border border-gray-700 text-gray-200 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:border-violet-500 hover:text-white">
+                        <i className="fas fa-arrow-up-right-from-square"></i>
+                      </a>
+                    </div>
                   )
                 ))}
               </div>
@@ -79,6 +97,7 @@ export default function RunsTable({ runs, onRate, ratingBusyId }) {
           </article>
         );
       })}
+      {viewer && <MediaViewer media={viewer.media} run={viewer.run} onClose={() => setViewer(null)} />}
     </div>
   );
 }

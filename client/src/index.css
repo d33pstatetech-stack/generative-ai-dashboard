@@ -16,10 +16,11 @@ body {
 
 /* Reusable bits (mirror the MuAPI client vocabulary) */
 .panel {
-  background: rgba(17, 24, 39, 0.7); /* gray-900/70 */
-  border: 1px solid #1f2937; /* gray-800 */
+  background: rgba(24, 32, 50, 0.85); /* slightly lighter than gray-900/70 for section contrast */
+  border: 1px solid #2f3b55; /* brighter than gray-800 */
   border-radius: 0.75rem;
   padding: 1rem;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.12); /* dull violet accent glow */
 }
 
 .panel-title {
@@ -30,7 +31,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #9ca3af; /* gray-400 */
+  color: #c4b5fd; /* violet-300 — brighter accent for headers */
   margin-bottom: 0.75rem;
 }
 
@@ -96,9 +97,9 @@ select.input {
   font-weight: 600;
   border-radius: 9999px;
   padding: 0.1rem 0.5rem;
-  background: #1f2937;
-  border: 1px solid #374151;
-  color: #9ca3af;
+  background: rgba(139, 92, 246, 0.14); /* violet accent tint */
+  border: 1px solid rgba(139, 92, 246, 0.55); /* brighter violet accent */
+  color: #c4b5fd; /* violet-300 */
 }
 
 .badge.live {

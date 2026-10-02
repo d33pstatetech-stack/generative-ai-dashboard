@@ -121,10 +121,19 @@ export async function storageUpload(key, blob, contentType) {
   return data; // { ok, key, size }
 }
 
-export async function storageList(prefix = '') {
-  const q = new URLSearchParams({ prefix, recursive: '1' });
+// Recursive R2 listing. `recursive` maps to the ?recursive= backend flag
+// (worker drops the delimiter when recursive=1). Paging info rides along as
+// extra props on the returned array so legacy callers
+// (`await storageList(prefix)` → array) keep working unchanged, while
+// Flatten mode can read `.truncated`/`.cursor` to keep Load-more working.
+export async function storageList(prefix = '', recursive = 1, cursor = null) {
+  const q = new URLSearchParams({ prefix, recursive: recursive ? '1' : '0' });
+  if (cursor) q.set('cursor', cursor);
   const data = await get(`/api/storage/list?${q.toString()}`);
-  return Array.isArray(data.objects) ? data.objects : [];
+  const objects = Array.isArray(data.objects) ? data.objects : [];
+  objects.truncated = !!data.truncated;
+  objects.cursor = data.truncated ? (data.cursor || null) : null;
+  return objects;
 }
 
 // Folder browsing (non-recursive): returns { folders, objects, truncated, cursor }.
