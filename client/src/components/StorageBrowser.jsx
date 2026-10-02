@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { storageBrowse, storageDelete, storageList, storageUpload, storageUsage } from '../api';
 import MediaViewer from './MediaViewer';
 
@@ -23,6 +23,53 @@ const typeOf = (key) => {
 };
 
 const dlUrl = (key) => `/api/storage/download?key=${encodeURIComponent(key)}`;
+
+// Viewport-lazy video preview: renders a pulsing placeholder until the tile
+// is near the viewport, then mounts the <video> (single src request).
+// Each tile owns its observer, so filtering / flatten / Load-more just work
+// (new tiles observe on mount). Observer disconnects after first intersect.
+function LazyVideo({ url, onError }) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setInView(true);
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            setInView(true);
+            obs.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <span ref={ref} className="block w-full h-full" aria-hidden="true">
+      {!inView ? (
+        <span className="block w-full h-full bg-gray-800 animate-pulse" />
+      ) : (
+        <span className="relative block w-full h-full">
+          <span className="absolute inset-0 bg-gray-800 animate-pulse" />
+          <video src={url} muted playsInline preload="metadata" disablePictureInPicture
+            onError={onError}
+            className="relative w-full h-full object-cover pointer-events-none" />
+        </span>
+      )}
+    </span>
+  );
+}
 
 // R2 file browser: folder navigation, PC uploads, multi-select delete.
 // Flatten mode lists recursively (storageList with recursive=1) and renders
@@ -49,6 +96,7 @@ export default function StorageBrowser({ notify }) {
   const [filterText, setFilterText] = useState('');
   const [viewer, setViewer] = useState(null); // { media: { url, video }, run } | null
   const [usage, setUsage] = useState(null); // { objects, bytes, freeTierBytes, updatedAt } | null
+  const [videoErr, setVideoErr] = useState({}); // key -> true when tile preview fails to load
 
   const fetchUsage = useCallback(async () => {
     try {
@@ -194,16 +242,22 @@ export default function StorageBrowser({ notify }) {
             <img src={url} alt="" loading="lazy" className="w-full h-full object-cover" />
           </button>
         ) : kind === 'video' ? (
+          videoErr[o.key] ? (
+            <button type="button" onClick={() => openViewer(o)} title={o.key} aria-label={`Open video ${label}`}
+              className="flex items-center justify-center w-full aspect-square bg-gray-900 hover:bg-gray-800 cursor-pointer">
+              <i className="fas fa-file-video text-gray-600 text-2xl"></i>
+            </button>
+          ) : (
           <button type="button" onClick={() => openViewer(o)} title={o.key} aria-label={`Open video ${label}`}
             className="relative block w-full aspect-square bg-black cursor-pointer">
-            <video src={url} muted preload="metadata" playsInline
-              className="w-full h-full object-cover pointer-events-none" />
+            <LazyVideo url={url} onError={() => setVideoErr((m) => ({ ...m, [o.key]: true }))} />
             <span className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
               <span className="w-10 h-10 rounded-full bg-black/70 border border-white/30 flex items-center justify-center">
                 <i className="fas fa-play text-white text-sm ml-0.5"></i>
               </span>
             </span>
           </button>
+          )
         ) : (
           <a href={url} target="_blank" rel="noreferrer" title={o.key} aria-label={`Open file ${label}`}
             className="flex items-center justify-center w-full aspect-square bg-gray-900 hover:bg-gray-800">
