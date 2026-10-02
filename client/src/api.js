@@ -149,3 +149,8 @@ export async function storageDelete(key) {
   if (!res.ok) throw new Error(errText(data.error, `Delete failed (${res.status})`));
   return data;
 }
+
+// Bucket-wide usage rollup: { objects, bytes, freeTierBytes, updatedAt }.
+export async function storageUsage() {
+  return get('/api/storage/usage');
+}

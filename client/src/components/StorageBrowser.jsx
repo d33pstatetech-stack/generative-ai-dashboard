@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { storageBrowse, storageDelete, storageList, storageUpload } from '../api';
+import { storageBrowse, storageDelete, storageList, storageUpload, storageUsage } from '../api';
+import MediaViewer from './MediaViewer';
 
 const IMG = /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i;
 const VID = /\.(mp4|webm|mov|m4v)$/i;
 
 const kb = (n) => (n == null ? '' : n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${(n / 1024).toFixed(1)} KB`);
+
+const fmtBytes = (n) => {
+  if (n == null || !isFinite(Number(n))) return '—';
+  const v = Number(n);
+  if (v >= 1073741824) return `${(v / 1073741824).toFixed(2)} GB`;
+  if (v >= 1048576) return `${(v / 1048576).toFixed(1)} MB`;
+  if (v >= 1024) return `${(v / 1024).toFixed(1)} KB`;
+  return `${v} B`;
+};
 
 const typeOf = (key) => {
   if (IMG.test(key || '')) return 'image';
@@ -12,10 +22,16 @@ const typeOf = (key) => {
   return 'other';
 };
 
+const dlUrl = (key) => `/api/storage/download?key=${encodeURIComponent(key)}`;
+
 // R2 file browser: folder navigation, PC uploads, multi-select delete.
 // Flatten mode lists recursively (storageList with recursive=1) and renders
 // full keys; default stays hierarchical (storageBrowse). Sort + filter are
 // client-side over the loaded objects. Upload/delete flows are untouched.
+// Objects render as a responsive grid (2/3/4 cols) with image <img> previews,
+// muted video first-frame previews + play badge, and icon tiles for other
+// files. Clicking a media tile opens the MediaViewer modal (same pattern as
+// RunsTable); non-media tiles link to the download URL in a new tab.
 // Props: notify.
 export default function StorageBrowser({ notify }) {
   const [prefix, setPrefix] = useState('');
@@ -31,6 +47,17 @@ export default function StorageBrowser({ notify }) {
   const [sortDir, setSortDir] = useState('asc');
   const [filterType, setFilterType] = useState('all');
   const [filterText, setFilterText] = useState('');
+  const [viewer, setViewer] = useState(null); // { media: { url, video }, run } | null
+  const [usage, setUsage] = useState(null); // { objects, bytes, freeTierBytes, updatedAt } | null
+
+  const fetchUsage = useCallback(async () => {
+    try {
+      const u = await storageUsage();
+      if (u && typeof u.bytes === 'number') setUsage(u);
+    } catch {
+      // Fail-soft: hide the capacity bar, never block the browser.
+    }
+  }, []);
 
   const load = useCallback(async (px = prefix, cur = null, append = false, flat = flatten) => {
     setLoading(true);
@@ -54,7 +81,10 @@ export default function StorageBrowser({ notify }) {
     }
   }, [prefix, flatten, notify]);
 
-  useEffect(() => { load('', null, false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // First list load, then lazily fetch usage so the bar never blocks browsing.
+    load('', null, false).finally(() => { fetchUsage(); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nav = (px) => {
     setPrefix(px);
@@ -92,6 +122,12 @@ export default function StorageBrowser({ notify }) {
   const toggle = (key) => setSelected((s) => (s.includes(key) ? s.filter((k) => k !== key) : [...s, key]));
   const toggleAll = () => setSelected((s) => (s.length === visible.length && visible.length ? [] : visible.map((o) => o.key)));
 
+  const openViewer = (o) => {
+    const url = dlUrl(o.key);
+    const video = VID.test(o.key || '');
+    setViewer({ media: { url, video }, run: {} });
+  };
+
   const upload = async (files) => {
     const list = [...(files || [])];
     if (!list.length) return;
@@ -103,7 +139,8 @@ export default function StorageBrowser({ notify }) {
       }
       setProgress('');
       notify && notify(`Uploaded ${list.length} file(s) → ${prefix || '(root)'}`, 'success');
-      load(prefix, null, false);
+      await load(prefix, null, false);
+      fetchUsage();
     } catch (e) {
       setProgress('');
       notify && notify(`Upload failed: ${e.message}`, 'error');
@@ -129,20 +166,74 @@ export default function StorageBrowser({ notify }) {
     setBusy(false);
     if (errs.length) notify && notify(`Deleted with ${errs.length} error(s): ${errs[0]}`, 'error');
     else notify && notify(`Deleted ${selected.length} object(s)`, 'success');
-    load(prefix, null, false);
+    await load(prefix, null, false);
+    fetchUsage();
   };
 
-  const thumb = (o) => {
-    const url = `/api/storage/download?key=${encodeURIComponent(o.key)}`;
-    if (IMG.test(o.key)) return <img src={url} alt="" loading="lazy" className="w-12 h-12 object-cover rounded bg-black flex-none" />;
-    if (VID.test(o.key)) {
-      return <span className="w-12 h-12 rounded bg-black flex-none flex items-center justify-center"><i className="fas fa-video text-gray-600 text-xs"></i></span>;
-    }
-    return <span className="w-12 h-12 rounded bg-gray-900 flex-none flex items-center justify-center"><i className="fas fa-file text-gray-600 text-xs"></i></span>;
+  const usageBar = useMemo(() => {
+    if (!usage || typeof usage.bytes !== 'number') return null;
+    const total = usage.freeTierBytes || 10737418240;
+    const pct = total > 0 ? Math.min(100, (usage.bytes / total) * 100) : 0;
+    return { total, pct };
+  }, [usage]);
+
+  const renderTile = (o) => {
+    const on = selected.includes(o.key);
+    const url = dlUrl(o.key);
+    const kind = typeOf(o.key);
+    const label = flatten ? o.key : o.key.replace(prefix, '');
+    return (
+      <div key={o.key}
+        className={`relative rounded-lg border overflow-hidden bg-gray-900/60 ${on ? 'border-violet-500 ring-1 ring-violet-500/50' : 'border-gray-800 hover:border-violet-700'}`}>
+        <input type="checkbox" checked={on} onChange={() => toggle(o.key)} aria-label={`Select ${o.key}`}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-2 left-2 z-20 accent-purple-500 w-5 h-5 rounded shadow" />
+        {kind === 'image' ? (
+          <button type="button" onClick={() => openViewer(o)} title={o.key} aria-label={`Open image ${label}`}
+            className="block w-full aspect-square bg-black cursor-zoom-in">
+            <img src={url} alt="" loading="lazy" className="w-full h-full object-cover" />
+          </button>
+        ) : kind === 'video' ? (
+          <button type="button" onClick={() => openViewer(o)} title={o.key} aria-label={`Open video ${label}`}
+            className="relative block w-full aspect-square bg-black cursor-pointer">
+            <video src={url} muted preload="metadata" playsInline
+              className="w-full h-full object-cover pointer-events-none" />
+            <span className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
+              <span className="w-10 h-10 rounded-full bg-black/70 border border-white/30 flex items-center justify-center">
+                <i className="fas fa-play text-white text-sm ml-0.5"></i>
+              </span>
+            </span>
+          </button>
+        ) : (
+          <a href={url} target="_blank" rel="noreferrer" title={o.key} aria-label={`Open file ${label}`}
+            className="flex items-center justify-center w-full aspect-square bg-gray-900 hover:bg-gray-800">
+            <i className="fas fa-file text-gray-600 text-2xl"></i>
+          </a>
+        )}
+        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-2 pt-5 pb-1.5 pointer-events-none">
+          <p className="text-[11px] font-mono text-gray-100 truncate" title={o.key}>{label}</p>
+          <p className="text-[10px] text-gray-400 truncate">{kb(o.size)}{o.uploaded ? ` · ${String(o.uploaded).slice(0, 10)}` : ''}</p>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="space-y-2">
+      {usageBar && (
+        <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-2" aria-label="Storage usage"
+          title={usage.updatedAt ? `Updated ${usage.updatedAt}` : undefined}>
+          <div className="flex justify-between gap-2 text-[11px] text-gray-300">
+            <span className="truncate">Used {fmtBytes(usage.bytes)} of {fmtBytes(usageBar.total)} free tier ({usageBar.pct.toFixed(1)}%)</span>
+            <span className="flex-none font-mono text-gray-400">{usage.objects ?? 0} objects</span>
+          </div>
+          <div className="mt-1.5 h-2 rounded-full bg-gray-800 overflow-hidden" role="progressbar"
+            aria-valuenow={Math.round(usageBar.pct)} aria-valuemin={0} aria-valuemax={100} aria-label="R2 free-tier usage">
+            <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all" style={{ width: `${usageBar.pct}%` }} />
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2 items-center">
         <label className="btn-secondary cursor-pointer">
           Upload from PC
@@ -171,7 +262,7 @@ export default function StorageBrowser({ notify }) {
           className="text-[11px] px-3 min-h-[44px] rounded-lg bg-red-900/60 border border-red-800 text-red-200 disabled:opacity-40">
           Delete selected ({selected.length})
         </button>
-        <button type="button" onClick={() => load(prefix, null, false)} disabled={loading} className="btn-secondary" aria-label="Refresh">
+        <button type="button" onClick={() => { load(prefix, null, false); fetchUsage(); }} disabled={loading} className="btn-secondary" aria-label="Refresh">
           <i className={`fas fa-rotate text-xs ${loading ? 'fa-spin' : ''}`}></i>
         </button>
         {progress && <span className="text-[11px] text-gray-400">{progress}</span>}
@@ -211,31 +302,23 @@ export default function StorageBrowser({ notify }) {
       {loading && !objects.length && !folders.length ? (
         <p className="text-xs text-gray-500 flex items-center gap-2"><span className="spinner !border-gray-600"></span>Loading…</p>
       ) : (
-        <div className="space-y-1 max-h-[420px] overflow-y-auto">
-          {folders.map((f) => (
-            <button key={f} type="button" onClick={() => nav(f)} disabled={busy}
-              className="w-full flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-800 hover:border-violet-600 text-left min-h-[44px]">
-              <i className="fas fa-folder text-amber-400/80 text-sm flex-none"></i>
-              <span className="text-xs text-gray-200 truncate">{f.replace(prefix, '')}</span>
-            </button>
-          ))}
-          {visible.map((o) => {
-            const on = selected.includes(o.key);
-            return (
-              <div key={o.key} className={`flex items-center gap-2 p-1.5 rounded-lg border ${on ? 'border-violet-500 bg-violet-950/30' : 'border-gray-800'}`}>
-                <input type="checkbox" checked={on} onChange={() => toggle(o.key)} aria-label={`Select ${o.key}`}
-                  className="accent-purple-500 w-5 h-5 flex-none ml-0.5" />
-                {thumb(o)}
-                <div className="min-w-0 flex-1">
-                  <a className="block text-[11px] font-mono text-gray-300 truncate hover:text-violet-300"
-                    href={`/api/storage/download?key=${encodeURIComponent(o.key)}`} target="_blank" rel="noreferrer" title={o.key}>
-                    {flatten ? o.key : o.key.replace(prefix, '')}
-                  </a>
-                  <span className="text-[10px] text-gray-600">{kb(o.size)}{o.uploaded ? ` · ${String(o.uploaded).slice(0, 10)}` : ''}</span>
-                </div>
-              </div>
-            );
-          })}
+        <div className="space-y-2 max-h-[420px] overflow-y-auto">
+          {folders.length > 0 && (
+            <div className="space-y-1">
+              {folders.map((f) => (
+                <button key={f} type="button" onClick={() => nav(f)} disabled={busy}
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-800 hover:border-violet-600 text-left min-h-[44px]">
+                  <i className="fas fa-folder text-amber-400/80 text-sm flex-none"></i>
+                  <span className="text-xs text-gray-200 truncate">{f.replace(prefix, '')}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {visible.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+              {visible.map((o) => renderTile(o))}
+            </div>
+          )}
           {!folders.length && !visible.length && (
             <p className="text-[11px] text-gray-600 py-4 text-center">
               {objects.length ? 'No objects match the current filters.' : 'Empty folder.'}
@@ -248,6 +331,7 @@ export default function StorageBrowser({ notify }) {
           Load more…
         </button>
       )}
+      {viewer && <MediaViewer media={viewer.media} run={viewer.run || {}} onClose={() => setViewer(null)} />}
     </div>
   );
 }

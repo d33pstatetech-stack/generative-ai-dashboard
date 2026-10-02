@@ -10,6 +10,7 @@
  *   GET  /api/balance/:provider      → muapi|wavespeed|runpod|replicate|modal
  *   PUT  /api/balance/:provider      → {value, note} manual fallback (replicate/modal)
   *   GET  /api/storage/list?prefix=
+ *   GET  /api/storage/usage           → { objects, bytes, freeTierBytes, updatedAt } (5-min in-memory cache)
   *   POST /api/storage/upload?key=    → body = file bytes
   *   GET  /api/storage/download?key=
   *   DELETE /api/storage/object?key=  → permanently delete one object
@@ -24,6 +25,11 @@ const PROTECTED_API_PREFIXES = ['/api/balance', '/api/storage', '/api/links', '/
 '/api/history', '/api/lora'];
 const PROVIDERS = ['muapi', 'wavespeed', 'runpod', 'replicate', 'modal'];
 const CACHE_TTL_MS = 10 * 60 * 1000;
+
+// In-memory storage-usage cache (~5 min). Module-level so warm isolates reuse it.
+const USAGE_TTL_MS = 5 * 60 * 1000;
+const FREE_TIER_BYTES = 10737418240; // 10 GB
+let usageCache = { at: 0, data: null };
 
 function isAccessAuthenticated(request) {
   const url = new URL(request.url);
@@ -459,6 +465,27 @@ async function handleApiRoute(request, env, path, url) {
       } catch {}
       return jsonResponse({ ok: true });
     }
+  }
+  if (path === '/api/storage/usage' && request.method === 'GET') {
+    if (!env.ASSETS_BUCKET) return jsonResponse({ configured: false, hint: 'Create R2 bucket genai-assets and bind ASSETS_BUCKET' });
+    const now = Date.now();
+    if (usageCache.data && (now - usageCache.at) < USAGE_TTL_MS) return jsonResponse(usageCache.data);
+    let cursor = undefined;
+    let bytes = 0;
+    let objects = 0;
+    for (let i = 0; i < 1000; i++) {
+      const listed = await env.ASSETS_BUCKET.list({ cursor, limit: 1000 });
+      const objs = listed.objects || [];
+      for (const o of objs) {
+        bytes += o.size || 0;
+        objects += 1;
+      }
+      if (listed.truncated) cursor = listed.cursor;
+      else break;
+    }
+    const data = { objects, bytes, freeTierBytes: FREE_TIER_BYTES, updatedAt: new Date().toISOString() };
+    usageCache = { at: now, data };
+    return jsonResponse(data);
   }
   if (path === '/api/storage/list' && request.method === 'GET') {
     if (!env.ASSETS_BUCKET) return jsonResponse({ configured: false, hint: 'Create R2 bucket genai-assets and bind ASSETS_BUCKET' });
