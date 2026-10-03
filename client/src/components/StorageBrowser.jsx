@@ -224,6 +224,36 @@ export default function StorageBrowser({ notify }) {
     fetchUsage();
   };
 
+  const downloadSelected = async () => {
+    if (!selected.length || busy) return;
+    setBusy(true);
+    const errs = [];
+    for (let i = 0; i < selected.length; i++) {
+      const key = selected[i];
+      setProgress(`Downloading ${i + 1}/${selected.length}…`);
+      try {
+        const res = await fetch(dlUrl(key));
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = key.split('/').pop() || 'download';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        await new Promise((r) => setTimeout(r, 300)); // stagger so browsers don't block multi-download
+      } catch (e) {
+        errs.push(`${key}: ${e.message}`);
+      }
+    }
+    setProgress('');
+    setBusy(false);
+    if (errs.length) notify && notify(`Downloaded with ${errs.length} error(s): ${errs[0]}`, 'error');
+    else notify && notify(`Downloaded ${selected.length} file(s)`, 'success');
+  };
+
   const usageBar = useMemo(() => {
     if (!usage || typeof usage.bytes !== 'number') return null;
     const total = usage.freeTierBytes || 10737418240;
@@ -317,6 +347,10 @@ export default function StorageBrowser({ notify }) {
       <div className="flex flex-wrap gap-2 items-center">
         <button type="button" onClick={toggleAll} disabled={busy || !visible.length} className="btn-secondary">
           {selected.length === visible.length && visible.length ? 'Deselect all' : 'Select all'}
+        </button>
+        <button type="button" onClick={downloadSelected} disabled={busy || !selected.length}
+          className="btn-secondary" aria-label={`Download ${selected.length} selected files`}>
+          <i className="fas fa-download text-xs"></i> Download selected ({selected.length})
         </button>
         <button type="button" onClick={removeSelected} disabled={busy || !selected.length}
           className="text-[11px] px-3 min-h-[44px] rounded-lg bg-red-900/60 border border-red-800 text-red-200 disabled:opacity-40">
