@@ -9,6 +9,7 @@ import RunsTable from './components/RunsTable';
 import Section from './components/Section';
 import StatCard from './components/StatCard';
 import Tip from './components/Tip';
+import Toasts from './components/Toasts';
 
 function useToast() {
   const [toasts, setToasts] = useState([]);
@@ -21,6 +22,24 @@ function useToast() {
 }
 
 const DEFAULT_FILTERS = { provider: '', model_like: '', status: '', min_rating: '', order: 'newest' };
+
+// Deep-link helpers: hashes like #files/#runs/#stats resolve to the existing
+// Section ids (sec-files/sec-runs/sec-stats). Accepts both short and full ids.
+function resolveSectionId(hash) {
+  const h = String(hash || '').replace(/^#/, '').trim();
+  if (!h) return null;
+  if (document.getElementById(h)) return h;
+  const withSec = `sec-${h}`;
+  if (document.getElementById(withSec)) return withSec;
+  return null;
+}
+
+function scrollToSection(id, smooth = true) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  el.scrollIntoView({ behavior: smooth && !reduce ? 'smooth' : 'auto', block: 'start' });
+}
 
 export default function App() {
   const { toasts, push: toast } = useToast();
@@ -138,6 +157,51 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Deep-link on mount: #files/#runs/#stats/... scrolls to the Section.
+  useEffect(() => {
+    const id = resolveSectionId(window.location.hash);
+    if (id) {
+      // Defer a tick so collapsed sections have rendered their anchors.
+      const t = setTimeout(() => scrollToSection(id, false), 50);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  // Keep back/forward hash navigation working (no router added).
+  useEffect(() => {
+    const onHash = () => {
+      const id = resolveSectionId(window.location.hash);
+      if (id) scrollToSection(id, false);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  // Global "/" focuses the file search (only when not already typing).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== '/') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const box = document.getElementById('files-search');
+      if (box) {
+        e.preventDefault();
+        scrollToSection('sec-files');
+        // Focus without an extra scroll jump (section already scrolled above).
+        try { box.focus({ preventScroll: true }); } catch { box.focus(); }
+      } else {
+        const sec = document.getElementById('sec-files');
+        if (sec) {
+          e.preventDefault();
+          scrollToSection('sec-files');
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const handleRate = useCallback(async (id, rating) => {
     setRatingBusyId(id);
     try {
@@ -172,7 +236,12 @@ export default function App() {
     ['sec-billing', 'Billing', 'fa-credit-card'],
     ['sec-runs', 'Runs', 'fa-clock-rotate-left'],
   ];
-  const jump = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const jump = (id) => {
+    scrollToSection(id);
+    try {
+      history.replaceState(null, '', `#${String(id).replace(/^sec-/, '')}`);
+    } catch { /* ignore */ }
+  };
   const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
   const apps = links.filter((l) => l.kind === 'app');
   // Billing page owns billing links; RunPod entries retired.
@@ -191,11 +260,11 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      <header className="border-b border-gray-800 sticky top-0 z-30 bg-gray-950/90 backdrop-blur">
+    <div className="min-h-screen bg-zinc-950 text-gray-100">
+      <header className="border-b border-gray-800 sticky top-0 z-30 bg-zinc-950/90 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <a href="/" className="flex items-center gap-3 min-w-0" title="Back to dashboard home">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-none">
+          <a href="/" className="flex items-center gap-3 min-w-0" title="Back to dashboard home" aria-label="Back to dashboard home">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center flex-none">
               <i className="fas fa-chart-simple text-white text-sm"></i>
             </div>
             <div className="min-w-0">
@@ -205,12 +274,12 @@ export default function App() {
               </p>
             </div>
           </a>
-          <span className={`ml-auto w-2 h-2 rounded-full flex-none ${health ? 'bg-emerald-500' : 'bg-gray-600'}`} title={health ? 'Connected' : 'Unknown'}></span>
+          <span className={`ml-auto w-2 h-2 rounded-full flex-none ${health ? 'bg-emerald-500' : 'bg-gray-600'}`} title={health ? 'Connected' : 'Unknown'} aria-hidden="true"></span>
         </div>
         <div className="max-w-6xl mx-auto px-4 pb-2 flex gap-2 overflow-x-auto">
           {headerApps.map((l) => (
             <a key={l.id} href={l.url} target="_blank" rel="noreferrer"
-              className="flex-none text-xs font-semibold px-3 min-h-[44px] inline-flex items-center rounded-lg bg-violet-600 hover:bg-violet-500 text-white">
+              className="flex-none text-xs font-semibold px-3 min-h-[44px] inline-flex items-center rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">
               {l.title} <i className="fas fa-arrow-up-right-from-square text-[10px] ml-1"></i>
             </a>
           ))}
@@ -221,8 +290,8 @@ export default function App() {
       <div className="max-w-6xl mx-auto px-4 pt-2 flex gap-1.5 overflow-x-auto" role="navigation" aria-label="Tools">
         {TOOLS.map(([id, label, icon]) => (
           <button key={id} type="button" onClick={() => jump(id)}
-            className="flex-none text-[11px] px-2.5 min-h-[44px] inline-flex items-center gap-1.5 rounded-lg border border-gray-700 text-gray-300 hover:border-violet-500 hover:text-white">
-            <i className={`fas ${icon} text-[10px] text-violet-300`}></i>{label}
+            className="flex-none text-[11px] px-2.5 min-h-[44px] inline-flex items-center gap-1.5 rounded-lg border border-gray-700 text-gray-300 hover:border-emerald-500 hover:text-white">
+            <i className={`fas ${icon} text-[10px] text-emerald-300`}></i>{label}
           </button>
         ))}
       </div>
@@ -305,7 +374,7 @@ export default function App() {
           <div className="flex flex-wrap gap-1.5 mb-1" role="group" aria-label="Provider filter">
             {enhProvAvail.map((p) => (
               <button key={p} type="button" onClick={() => toggleProv(p)} aria-pressed={enhProviders.includes(p)}
-                className={`text-[11px] px-2.5 min-h-[44px] rounded-full border ${enhProviders.includes(p) ? 'bg-violet-600 border-violet-500 text-white' : 'border-gray-700 text-gray-400'}`}>
+                className={`text-[11px] px-2.5 min-h-[44px] rounded-full border ${enhProviders.includes(p) ? 'bg-emerald-600 border-emerald-500 text-white' : 'border-gray-700 text-gray-400'}`}>
                 {p}
               </button>
             ))}
@@ -318,7 +387,7 @@ export default function App() {
           <div className="flex gap-1.5 mb-3" role="group" aria-label="Media type filter">
             {['all', 'image', 'video'].map((m) => (
               <button key={m} type="button" onClick={() => setEnhMedia(m)} aria-pressed={enhMedia === m}
-                className={`text-[11px] px-3 min-h-[44px] rounded-full border capitalize ${enhMedia === m ? 'bg-violet-600 border-violet-500 text-white' : 'border-gray-700 text-gray-400'}`}>
+                className={`text-[11px] px-3 min-h-[44px] rounded-full border capitalize ${enhMedia === m ? 'bg-emerald-600 border-emerald-500 text-white' : 'border-gray-700 text-gray-400'}`}>
                 {m === 'all' ? 'image + video' : m}
               </button>
             ))}
@@ -354,10 +423,10 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {billingLinks.map((l) => (
                 <a key={l.id} href={l.url} target="_blank" rel="noreferrer"
-                  className="panel !p-4 block hover:border-violet-600 min-h-[44px]">
+                  className="panel !p-4 block hover:border-emerald-600 min-h-[44px]">
                   <div className="text-sm font-semibold text-gray-100">{l.title}</div>
                   {l.desc && <p className="mt-1 text-xs text-gray-500">{l.desc}</p>}
-                  <div className="mt-2 text-xs text-violet-300">Open billing <i className="fas fa-arrow-up-right-from-square text-[10px]"></i></div>
+                  <div className="mt-2 text-xs text-emerald-300">Open billing <i className="fas fa-arrow-up-right-from-square text-[10px]"></i></div>
                 </a>
               ))}
             </div>
@@ -405,17 +474,11 @@ export default function App() {
           </div>
           {runsLoading
             ? <p className="text-xs text-gray-500 flex items-center gap-2"><span className="spinner !border-gray-600"></span>Loading runs…</p>
-            : <RunsTable runs={runs} onRate={handleRate} ratingBusyId={ratingBusyId} />}
+            : <RunsTable runs={runs} onRate={handleRate} ratingBusyId={ratingBusyId} notify={toast} />}
         </Section>
       </main>
 
-      <div className="fixed bottom-4 right-4 space-y-2 z-50 max-w-[90vw]">
-        {toasts.map((t) => (
-          <div key={t.id} className={`text-xs px-3 py-2 rounded-lg border shadow-xl ${t.kind === 'error' ? 'bg-red-950/90 border-red-800 text-red-200' : t.kind === 'success' ? 'bg-emerald-950/90 border-emerald-800 text-emerald-200' : 'bg-gray-900/95 border-gray-700 text-gray-200'}`}>
-            {t.message}
-          </div>
-        ))}
-      </div>
+      <Toasts toasts={toasts} />
     </div>
   );
 }

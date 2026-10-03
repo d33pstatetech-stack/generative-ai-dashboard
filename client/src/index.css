@@ -2,25 +2,76 @@
 
 /* Generative AI Dashboard — React rework (feature/dashboard-react).
    Design tokens carried over from the MuAPI React client: dark-first,
-   gray-950 base, violet accents, .panel/.input/.btn vocabulary. */
+   near-black zinc base, emerald accents, .panel/.input/.btn vocabulary.
+   (Audit mockup language: zinc-950 #09090b, ok emerald #34d399, mono
+   micro-labels with wide tracking, subtle grain, 1px borders.) */
 
 :root {
   color-scheme: dark;
+  --ok: #34d399; /* emerald-400 */
+  --line: #27272a; /* zinc-800 */
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 html,
 body {
-  background: #030712; /* gray-950 */
+  background: #09090b; /* zinc-950 (near-black zinc) */
   color: #f3f4f6; /* gray-100 */
+}
+
+/* Subtle film grain (static overlay; no animation so reduced-motion is unaffected). */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::selection {
+  background: rgba(52, 211, 153, 0.35);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ok);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Dark scrollbar (audit language). */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #08080b;
+}
+::-webkit-scrollbar-thumb {
+  background: #26262e;
+  border-radius: 8px;
+  border: 2px solid #08080b;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #059669;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #26262e #08080b;
 }
 
 /* Reusable bits (mirror the MuAPI client vocabulary) */
 .panel {
-  background: rgba(24, 32, 50, 0.85); /* slightly lighter than gray-900/70 for section contrast */
-  border: 1px solid #2f3b55; /* brighter than gray-800 */
+  background: #101014; /* near-black zinc panel */
+  border: 1px solid var(--line); /* crisp 1px zinc border */
   border-radius: 0.75rem;
   padding: 1rem;
-  box-shadow: 0 0 12px rgba(139, 92, 246, 0.12); /* dull violet accent glow */
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.08); /* emerald accent glow */
 }
 
 .panel-title {
@@ -31,12 +82,21 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #c4b5fd; /* violet-300 — brighter accent for headers */
+  color: #6ee7b7; /* emerald-300 — accent for headers */
   margin-bottom: 0.75rem;
 }
 
+/* Mono micro-labels: font-mono text-[10-11px] tracking-[0.15em+] uppercase, muted. */
+.micro-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #a1a1aa; /* zinc-400 */
+}
+
 .gradient-text {
-  background: linear-gradient(90deg, #c084fc, #818cf8);
+  background: linear-gradient(90deg, #6ee7b7, #34d399);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -59,11 +119,12 @@ select.input {
 
 .input:focus {
   outline: none;
-  border-color: #8b5cf6;
+  border-color: var(--ok);
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.4);
 }
 
 .btn-primary-sm {
-  background: #7c3aed; /* violet-600 */
+  background: #059669; /* emerald-600 */
   color: #fff;
   border-radius: 0.55rem;
   padding: 0.5rem 0.9rem;
@@ -73,7 +134,7 @@ select.input {
 }
 
 .btn-primary-sm:hover {
-  background: #6d28d9; /* violet-700 */
+  background: #047857; /* emerald-700 */
 }
 
 .btn-primary-sm:disabled {
@@ -97,9 +158,9 @@ select.input {
   font-weight: 600;
   border-radius: 9999px;
   padding: 0.1rem 0.5rem;
-  background: rgba(139, 92, 246, 0.14); /* violet accent tint */
-  border: 1px solid rgba(139, 92, 246, 0.55); /* brighter violet accent */
-  color: #c4b5fd; /* violet-300 */
+  background: rgba(52, 211, 153, 0.12); /* emerald accent tint */
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  color: #6ee7b7; /* emerald-300 */
 }
 
 .badge.live {
@@ -130,6 +191,43 @@ select.input {
   }
 }
 
+/* 44px touch floor (audit): buttons, icon buttons, tabs, checkboxes (via their
+   label hit area), stars. min-* only so layouts can still grow. */
+button,
+.btn-secondary,
+.btn-primary-sm {
+  min-height: 44px;
+}
+
+button[aria-label],
+a[aria-label] {
+  min-width: 44px;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: #059669;
+}
+
+label:has(> input[type='checkbox']),
+label:has(> input[type='radio']) {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Metadata/error type floor: microcopy never renders below 12px. */
+.text-\[9px\],
+.text-\[10px\],
+.text-\[11px\] {
+  font-size: 12px;
+}
+
 /* Tooltip bulleted lists: hanging indent so wrapped lines tuck under the text. */
 .tip-intro {
   margin: 0 0 0.35rem;
@@ -148,18 +246,31 @@ select.input {
 }
 
 /* Desktop readability: scale rem-based type/spacing up a notch and enlarge the
-   px-based microcopy that Tailwind's rem scale can't reach. */
+   px-based microcopy that Tailwind's rem scale can't reach (floor kept >=12px). */
 @media (min-width: 1024px) {
   html {
     font-size: 17px;
   }
   .text-\[9px\] {
-    font-size: 10px;
+    font-size: 12px;
   }
   .text-\[10px\] {
-    font-size: 11.5px;
+    font-size: 12px;
   }
   .text-\[11px\] {
     font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -1,0 +1,251 @@
+/* MediaViewer dialog styles. Lives apart from index.css (owned by another workstream).
+ * Layout: desktop = stage + sidebar grid; mobile = near-fullscreen column,
+ * sidebar collapses into a details section under the stage (single scroll). */
+
+.mv-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.mv-dialog {
+  width: 100%;
+  max-width: 64rem; /* max-w-5xl */
+  max-height: 90vh;
+  overflow: hidden;
+  outline: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.mv-layout {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mv-stage-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+}
+
+.mv-stage-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+
+.mv-counter {
+  font-size: 12px;
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mv-zoom-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.mv-tool-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid #374151;
+  background: rgba(17, 24, 39, 0.8);
+  color: #e5e7eb;
+  font-size: 14px;
+  cursor: pointer;
+}
+.mv-tool-btn:hover { border-color: #8b5cf6; color: #fff; }
+.mv-tool-btn:disabled { opacity: 0.35; cursor: default; }
+
+.mv-stage {
+  position: relative;
+  min-width: 0;
+  background: #000;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mv-viewport {
+  width: 100%;
+  max-height: 70vh;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: pan-y; /* allow vertical page scroll, we handle horizontal swipe */
+  outline: none;
+}
+.mv-viewport.mv-zoomed { touch-action: none; cursor: grab; }
+.mv-viewport.mv-dragging { cursor: grabbing; }
+
+.mv-img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform:
+    translate(var(--mv-tx, 0px), var(--mv-ty, 0px))
+    scale(var(--mv-scale, 1));
+  transform-origin: var(--mv-ox, 50%) var(--mv-oy, 50%);
+  transition: transform 120ms ease-out;
+}
+.mv-viewport.mv-dragging .mv-img { transition: none; }
+
+.mv-video {
+  width: 100%;
+  max-height: 70vh;
+  background: #000;
+  border-radius: 0.5rem;
+}
+
+.mv-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 64px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: 1px solid #374151;
+  background: rgba(0, 0, 0, 0.7);
+  color: #e5e7eb;
+  font-size: 18px;
+  cursor: pointer;
+}
+.mv-nav-btn:hover { border-color: #8b5cf6; color: #fff; }
+.mv-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.mv-nav-prev { left: 8px; }
+.mv-nav-next { right: 8px; }
+
+.mv-filmstrip {
+  display: flex;
+  gap: 0.375rem;
+  overflow-x: auto;
+  padding: 0.25rem 0.125rem;
+  scrollbar-width: thin;
+}
+
+.mv-thumb {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 0.375rem;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: #000;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+}
+.mv-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+.mv-thumb.active { border-color: #8b5cf6; }
+.mv-thumb-badge {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.mv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mv-details-toggle { display: none; }
+
+.mv-sidebar {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.mv-prompt-scroll {
+  max-height: 12rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- Mobile: near-fullscreen stage, single scroll, collapsible details ---------- */
+@media (max-width: 767px) {
+  .mv-backdrop {
+    padding: 0.5rem;
+    align-items: stretch;
+  }
+  .mv-dialog {
+    max-height: 96vh;
+    height: 96vh;
+    overflow-y: auto; /* single scroll container — no nested scroll boxes */
+  }
+  .mv-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+  .mv-viewport,
+  .mv-img { max-height: 62vh; }
+  .mv-viewport { min-height: 200px; }
+  .mv-details-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    width: 100%;
+    min-height: 44px;
+    border-radius: 0.5rem;
+    border: 1px solid #374151;
+    background: rgba(17, 24, 39, 0.8);
+    color: #e5e7eb;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .mv-sidebar {
+    overflow: visible; /* parent dialog scrolls instead */
+  }
+  .mv-sidebar.mv-collapsed { display: none; }
+  .mv-prompt-scroll {
+    max-height: none; /* un-nest the prompt scroll on mobile */
+    overflow: visible;
+  }
+}

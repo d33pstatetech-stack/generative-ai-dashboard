@@ -73,7 +73,7 @@ export default function AddLoraUrl({ onAdd, notify, defaultNsfw = false }) {
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)}
-        className="w-full text-[11px] px-2 py-2 rounded-lg border border-dashed border-gray-700 text-gray-400 hover:border-violet-500 hover:text-gray-200 min-h-[44px]">
+        className="w-full text-[11px] px-2 py-2 rounded-lg border border-dashed border-gray-700 text-gray-400 hover:border-emerald-500 hover:text-gray-200 min-h-[44px]">
         ＋ Add LoRA from HuggingFace / CivitAI URL
       </button>
     );
@@ -101,7 +101,7 @@ export default function AddLoraUrl({ onAdd, notify, defaultNsfw = false }) {
             <div className="space-y-1">
               {cands.map((c, i) => (
                 <label key={c.file} className="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer">
-                  <input type="radio" checked={pickIdx === i} onChange={() => setPickIdx(i)} className="accent-purple-500" />
+                  <input type="radio" checked={pickIdx === i} onChange={() => setPickIdx(i)} className="accent-emerald-500" />
                   <span className="truncate font-mono" title={c.file_url}>{c.file}</span>
                   {c.recommended && <span className="text-[9px] text-emerald-300 flex-none">★ suggested</span>}
                 </label>

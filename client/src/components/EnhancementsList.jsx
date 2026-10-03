@@ -14,7 +14,7 @@ export default function EnhancementsList({ items }) {
             <span className="text-gray-600 font-semibold">RAW: </span>{e.raw_prompt}
           </p>
           <p className="mt-1 text-xs text-gray-200 whitespace-pre-wrap break-words line-clamp-6">
-            <span className="text-violet-400 font-semibold">ENHANCED: </span>{e.enhanced_prompt}
+            <span className="text-emerald-400 font-semibold">ENHANCED: </span>{e.enhanced_prompt}
           </p>
           {(e.llm_provider || e.llm_model) && (
             <p className="mt-1 text-[11px] text-gray-600">

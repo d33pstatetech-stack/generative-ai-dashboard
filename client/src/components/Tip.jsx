@@ -58,7 +58,7 @@ export default function Tip({ text, children }) {
         onMouseLeave={() => setShow(false)}
         onFocus={() => setShow(true)}
         onBlur={() => setShow(false)}
-        className="text-gray-500 hover:text-violet-300 text-[11px] leading-none px-0.5"
+        className="text-gray-500 hover:text-emerald-300 text-[11px] leading-none px-0.5"
       >
         <i className="fas fa-info-circle"></i>
       </button>

@@ -266,13 +266,13 @@ export default function MaskPainter({ notify }) {
       <div className="flex items-center gap-2">
         <span className="text-[10px] text-gray-500 w-12 flex-none">Brush</span>
         <input type="range" min={4} max={200} value={brush} onChange={(e) => setBrush(Number(e.target.value))}
-          className="flex-1 accent-purple-500 min-h-[44px]" aria-label="Brush size" />
+          className="flex-1 accent-emerald-500 min-h-[44px]" aria-label="Brush size" />
         <span className="text-[11px] font-mono text-gray-300 w-12 text-right flex-none">{brush}px</span>
       </div>
       <div className="flex items-center gap-2">
         <span className="text-[10px] text-gray-500 w-12 flex-none">Overlay</span>
         <input type="range" min={10} max={100} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))}
-          className="flex-1 accent-purple-500 min-h-[44px]" aria-label="Overlay opacity" />
+          className="flex-1 accent-emerald-500 min-h-[44px]" aria-label="Overlay opacity" />
         <span className="text-[11px] font-mono text-gray-300 w-12 text-right flex-none">{opacity}%</span>
       </div>
       <div className="relative rounded-lg overflow-hidden bg-black touch-none select-none" style={{ touchAction: 'none' }}>

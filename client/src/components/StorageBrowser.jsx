@@ -94,7 +94,7 @@ export default function StorageBrowser({ notify }) {
   const [sortDir, setSortDir] = useState('asc');
   const [filterType, setFilterType] = useState('all');
   const [filterText, setFilterText] = useState('');
-  const [viewer, setViewer] = useState(null); // { media: { url, video }, run } | null
+  const [viewer, setViewer] = useState(null); // { items: [{ media, run }], index } | null
   const [usage, setUsage] = useState(null); // { objects, bytes, freeTierBytes, updatedAt } | null
   const [videoErr, setVideoErr] = useState({}); // key -> true when tile preview fails to load
 
@@ -171,9 +171,15 @@ export default function StorageBrowser({ notify }) {
   const toggleAll = () => setSelected((s) => (s.length === visible.length && visible.length ? [] : visible.map((o) => o.key)));
 
   const openViewer = (o) => {
-    const url = dlUrl(o.key);
-    const video = VID.test(o.key || '');
-    setViewer({ media: { url, video }, run: {} });
+    // Sibling list = currently visible media tiles (after sort/filter), so
+    // arrows/filmstrip/swipe walk the grid the user is looking at.
+    const mediaObjs = visible.filter((v) => typeOf(v.key) !== 'other');
+    const items = mediaObjs.map((v) => ({
+      media: { url: dlUrl(v.key), video: VID.test(v.key || '') },
+      run: {},
+    }));
+    const idx = Math.max(0, mediaObjs.findIndex((v) => v.key === o.key));
+    setViewer({ items, index: idx });
   };
 
   const upload = async (files) => {
@@ -232,10 +238,10 @@ export default function StorageBrowser({ notify }) {
     const label = flatten ? o.key : o.key.replace(prefix, '');
     return (
       <div key={o.key}
-        className={`relative rounded-lg border overflow-hidden bg-gray-900/60 ${on ? 'border-violet-500 ring-1 ring-violet-500/50' : 'border-gray-800 hover:border-violet-700'}`}>
+        className={`relative rounded-lg border overflow-hidden bg-gray-900/60 ${on ? 'border-emerald-500 ring-1 ring-emerald-500/50' : 'border-gray-800 hover:border-emerald-700'}`}>
         <input type="checkbox" checked={on} onChange={() => toggle(o.key)} aria-label={`Select ${o.key}`}
           onClick={(e) => e.stopPropagation()}
-          className="absolute top-2 left-2 z-20 accent-purple-500 w-5 h-5 rounded shadow" />
+          className="absolute top-2 left-2 z-20 accent-emerald-500 w-5 h-5 rounded shadow" />
         {kind === 'image' ? (
           <button type="button" onClick={() => openViewer(o)} title={o.key} aria-label={`Open image ${label}`}
             className="block w-full aspect-square bg-black cursor-zoom-in">
@@ -283,7 +289,7 @@ export default function StorageBrowser({ notify }) {
           </div>
           <div className="mt-1.5 h-2 rounded-full bg-gray-800 overflow-hidden" role="progressbar"
             aria-valuenow={Math.round(usageBar.pct)} aria-valuemin={0} aria-valuemax={100} aria-label="R2 free-tier usage">
-            <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all" style={{ width: `${usageBar.pct}%` }} />
+            <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 transition-all" style={{ width: `${usageBar.pct}%` }} />
           </div>
         </div>
       )}
@@ -295,13 +301,13 @@ export default function StorageBrowser({ notify }) {
             onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
         </label>
         <div className="flex items-center gap-1 text-[11px] min-w-0 flex-1" aria-label="Breadcrumbs">
-          <button type="button" onClick={() => nav('')} disabled={busy} className="text-violet-300 hover:text-white flex-none" title="Root">R2</button>
+          <button type="button" onClick={() => nav('')} disabled={busy} className="text-emerald-300 hover:text-white flex-none" title="Root" aria-label="Storage root">R2</button>
           {crumbs.map((c, i) => (
             <span key={i} className="flex items-center gap-1 min-w-0">
               <span className="text-gray-600">/</span>
               <button type="button" disabled={busy}
                 onClick={() => nav(crumbs.slice(0, i + 1).join('/') + '/')}
-                className="text-violet-300 hover:text-white truncate" title={c}>{c}</button>
+                className="text-emerald-300 hover:text-white truncate" title={c}>{c}</button>
             </span>
           ))}
         </div>
@@ -316,7 +322,7 @@ export default function StorageBrowser({ notify }) {
           className="text-[11px] px-3 min-h-[44px] rounded-lg bg-red-900/60 border border-red-800 text-red-200 disabled:opacity-40">
           Delete selected ({selected.length})
         </button>
-        <button type="button" onClick={() => { load(prefix, null, false); fetchUsage(); }} disabled={loading} className="btn-secondary" aria-label="Refresh">
+        <button type="button" onClick={() => { load(prefix, null, false); fetchUsage(); }} disabled={loading} className="btn-secondary" aria-label="Refresh files">
           <i className={`fas fa-rotate text-xs ${loading ? 'fa-spin' : ''}`}></i>
         </button>
         {progress && <span className="text-[11px] text-gray-400">{progress}</span>}
@@ -325,7 +331,7 @@ export default function StorageBrowser({ notify }) {
       <div className="flex flex-wrap gap-2 items-center" role="group" aria-label="Flatten, sort and filter">
         <label className="btn-secondary inline-flex items-center gap-2 cursor-pointer select-none" title="List recursively with full keys">
           <input type="checkbox" checked={flatten} onChange={toggleFlatten} disabled={busy || loading}
-            className="accent-purple-500 w-4 h-4" aria-label="Flatten: list all objects recursively" />
+            className="accent-emerald-500 w-4 h-4" aria-label="Flatten: list all objects recursively" />
           Flatten
         </label>
         <select className="input !w-auto !min-h-[44px] text-xs" value={sortKey} onChange={(e) => setSortKey(e.target.value)}
@@ -346,8 +352,8 @@ export default function StorageBrowser({ notify }) {
           <option value="video">videos</option>
           <option value="other">other</option>
         </select>
-        <input className="input !w-40 !min-h-[44px] text-xs" value={filterText} onChange={(e) => setFilterText(e.target.value)}
-          placeholder="filename contains…" aria-label="Filter by filename" title="Filter by filename substring" />
+        <input id="files-search" className="input !w-40 !min-h-[44px] text-xs" value={filterText} onChange={(e) => setFilterText(e.target.value)}
+          placeholder="filename contains… (/ to focus)" aria-label="Filter by filename" title="Filter by filename substring (press / to focus)" />
         {(filterType !== 'all' || filterText.trim()) && (
           <span className="text-[11px] text-gray-500">{visible.length}/{objects.length} shown</span>
         )}
@@ -361,7 +367,7 @@ export default function StorageBrowser({ notify }) {
             <div className="space-y-1">
               {folders.map((f) => (
                 <button key={f} type="button" onClick={() => nav(f)} disabled={busy}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-800 hover:border-violet-600 text-left min-h-[44px]">
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-gray-800/40 border border-gray-800 hover:border-emerald-600 text-left min-h-[44px]">
                   <i className="fas fa-folder text-amber-400/80 text-sm flex-none"></i>
                   <span className="text-xs text-gray-200 truncate">{f.replace(prefix, '')}</span>
                 </button>
@@ -385,7 +391,16 @@ export default function StorageBrowser({ notify }) {
           Load more…
         </button>
       )}
-      {viewer && <MediaViewer media={viewer.media} run={viewer.run || {}} onClose={() => setViewer(null)} />}
+      {viewer && (
+        <MediaViewer
+          media={viewer.items[viewer.index].media}
+          run={viewer.items[viewer.index].run || {}}
+          items={viewer.items}
+          index={viewer.index}
+          onNav={(next) => setViewer((v) => ({ ...v, index: next }))}
+          onClose={() => setViewer(null)}
+        />
+      )}
     </div>
   );
 }

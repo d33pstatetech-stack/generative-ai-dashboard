@@ -213,7 +213,7 @@ export default function Headshots({ notify }) {
                   <span className="text-[10px] text-gray-500 w-14 flex-none">cut {i + 1}</span>
                   <input type="range" min={2} max={98} step={0.5} value={Math.round(c * 100)}
                     onChange={(e) => adjustCut(i, Number(e.target.value) / 100)}
-                    className="flex-1 accent-purple-500 min-h-[44px]" aria-label={`Divider ${i + 1} percent`} />
+                    className="flex-1 accent-emerald-500 min-h-[44px]" aria-label={`Divider ${i + 1} percent`} />
                   <span className="text-[11px] font-mono text-gray-300 w-12 text-right flex-none">{Math.round(c * 100)}%</span>
                 </div>
               ))}
@@ -229,7 +229,7 @@ export default function Headshots({ notify }) {
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {outputs.map((o) => (
                   <div key={o.key} className="flex justify-between gap-2 text-[11px] font-mono">
-                    <a className="text-gray-300 truncate hover:text-violet-300"
+                      <a className="text-gray-300 truncate hover:text-emerald-300"
                       href={`/api/storage/download?key=${encodeURIComponent(o.key)}`} target="_blank" rel="noreferrer" title={o.key}>
                       {o.key}
                     </a>

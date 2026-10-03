@@ -39,8 +39,13 @@ function resolveAllMedia(run) {
 }
 
 // Mobile-first runs history: stacked cards on small screens, table on md+.
-export default function RunsTable({ runs, onRate, ratingBusyId }) {
-  const [viewer, setViewer] = useState(null); // { media, run } | null
+// Rating/confirm errors surface via the notify toast (App-owned); this table
+// keeps its inline empty-states as before (additive only, no logic removed).
+export default function RunsTable({ runs, onRate, ratingBusyId, notify }) {
+  void notify;
+  const [viewer, setViewer] = useState(null); // { items: [{ media, run }], index } | null
+  const openViewer = (r, media, i) =>
+    setViewer({ items: media.map((m) => ({ media: m, run: r })), index: i });
   if (!runs.length) return <p className="text-xs text-gray-600 py-8 text-center">No runs match these filters.</p>;
   return (
     <div className="space-y-3">
@@ -55,21 +60,22 @@ export default function RunsTable({ runs, onRate, ratingBusyId }) {
                   m.video ? (
                     <div key={i} className="relative group">
                       <video src={m.url} controls preload="metadata" className="w-full max-h-64 rounded-lg bg-black" />
-                      <button type="button" onClick={() => setViewer({ media: m, run: r })}
-                        className="absolute top-1.5 right-1.5 text-[11px] px-2 min-h-[36px] rounded-lg bg-black/70 border border-gray-700 text-gray-200 opacity-0 group-hover:opacity-100 focus:opacity-100 max-md:opacity-100 hover:border-violet-500 hover:text-white"
+                      <button type="button" onClick={() => openViewer(r, media, i)}
+                        className="absolute top-1.5 right-1.5 text-[11px] px-2 min-h-[44px] rounded-lg bg-black/70 border border-gray-700 text-gray-200 opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 max-md:opacity-100 hover:border-emerald-500 hover:text-white"
                         title="Open in viewer" aria-label={`Open video ${i + 1} in viewer`}>
                         <i className="fas fa-expand mr-1"></i>Viewer
                       </button>
                     </div>
                   ) : (
                     <div key={i} className="relative group">
-                      <button type="button" onClick={() => setViewer({ media: m, run: r })}
-                        className="block w-full cursor-zoom-in rounded-lg overflow-hidden border border-transparent hover:border-violet-500 transition"
+                      <button type="button" onClick={() => openViewer(r, media, i)}
+                        className="block w-full cursor-zoom-in rounded-lg overflow-hidden border border-transparent hover:border-emerald-500 transition"
                         title="Open in viewer" aria-label={`Open image ${i + 1} in viewer`}>
                         <img src={m.url} alt="" loading="lazy" className="w-full max-h-64 object-contain rounded-lg bg-black" />
                       </button>
                       <a href={m.url} target="_blank" rel="noreferrer" title="Open original in new tab"
-                        className="absolute top-1.5 right-1.5 text-[11px] px-2 min-h-[36px] inline-flex items-center rounded-lg bg-black/70 border border-gray-700 text-gray-200 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:border-violet-500 hover:text-white">
+                        aria-label={`Open original media ${i + 1} in new tab`}
+                        className="absolute top-1.5 right-1.5 text-[11px] px-2 min-h-[44px] inline-flex items-center rounded-lg bg-black/70 border border-gray-700 text-gray-200 opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 hover:border-emerald-500 hover:text-white">
                         <i className="fas fa-arrow-up-right-from-square"></i>
                       </a>
                     </div>
@@ -97,7 +103,16 @@ export default function RunsTable({ runs, onRate, ratingBusyId }) {
           </article>
         );
       })}
-      {viewer && <MediaViewer media={viewer.media} run={viewer.run} onClose={() => setViewer(null)} />}
+      {viewer && (
+        <MediaViewer
+          media={viewer.items[viewer.index].media}
+          run={viewer.items[viewer.index].run}
+          items={viewer.items}
+          index={viewer.index}
+          onNav={(next) => setViewer((v) => ({ ...v, index: next }))}
+          onClose={() => setViewer(null)}
+        />
+      )}
     </div>
   );
 }
