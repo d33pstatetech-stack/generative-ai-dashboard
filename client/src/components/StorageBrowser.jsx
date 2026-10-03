@@ -113,12 +113,24 @@ export default function StorageBrowser({ notify }) {
       if (flat) {
         const arr = await storageList(px, 1, cur);
         setFolders([]);
-        setObjects((o) => (append ? [...o, ...arr] : [...arr]));
+        setObjects((o) => {
+          if (!append) return [...arr];
+          const seen = new Set(o.map((x) => x.key));
+          return [...o, ...(arr || []).filter((x) => !seen.has(x.key))];
+        });
         setCursor(arr.truncated ? arr.cursor : null);
       } else {
         const d = await storageBrowse(px, cur);
-        setFolders(append ? (f) => f : (d.folders || []));
-        setObjects((o) => (append ? [...o, ...(d.objects || [])] : (d.objects || [])));
+        setFolders((f) => {
+          if (!append) return (d.folders || []);
+          const seen = new Set(f);
+          return [...f, ...(d.folders || []).filter((name) => !seen.has(name))];
+        });
+        setObjects((o) => {
+          if (!append) return (d.objects || []);
+          const seen = new Set(o.map((x) => x.key));
+          return [...o, ...(d.objects || []).filter((x) => !seen.has(x.key))];
+        });
         setCursor(d.truncated ? d.cursor : null);
       }
       setSelected([]);
@@ -169,6 +181,10 @@ export default function StorageBrowser({ notify }) {
 
   const toggle = (key) => setSelected((s) => (s.includes(key) ? s.filter((k) => k !== key) : [...s, key]));
   const toggleAll = () => setSelected((s) => (s.length === visible.length && visible.length ? [] : visible.map((o) => o.key)));
+
+  const filterActive = filterType !== 'all' || !!filterText.trim();
+  const dirStatus = `${prefix || 'R2 root'} — ${objects.length} file(s) · ${flatten ? 0 : folders.length} folder(s) loaded · ${cursor ? 'more available' : 'complete'}${filterActive ? ` · filter showing ${visible.length} of ${objects.length}` : ''}`;
+  const loadMoreLabel = `Load more… (${objects.length} loaded — more available)`;
 
   const openViewer = (o) => {
     // Sibling list = currently visible media tiles (after sort/filter), so
@@ -344,6 +360,15 @@ export default function StorageBrowser({ notify }) {
         {prefix && <button type="button" onClick={up} disabled={busy} className="btn-secondary flex-none">↑ Up</button>}
       </div>
 
+      <div className="flex flex-wrap gap-2 items-center" aria-live="polite">
+        <span className="text-[11px] text-gray-500">{dirStatus}</span>
+        {cursor && (
+          <button type="button" onClick={() => load(prefix, cursor, true)} disabled={loading} className="btn-secondary !min-h-[32px] !px-2 !py-1 !text-[11px]">
+            {loadMoreLabel}
+          </button>
+        )}
+      </div>
+
       <div className="flex flex-wrap gap-2 items-center">
         <button type="button" onClick={toggleAll} disabled={busy || !visible.length} className="btn-secondary">
           {selected.length === visible.length && visible.length ? 'Deselect all' : 'Select all'}
@@ -388,9 +413,6 @@ export default function StorageBrowser({ notify }) {
         </select>
         <input id="files-search" className="input !w-40 !min-h-[44px] text-xs" value={filterText} onChange={(e) => setFilterText(e.target.value)}
           placeholder="filename contains… (/ to focus)" aria-label="Filter by filename" title="Filter by filename substring (press / to focus)" />
-        {(filterType !== 'all' || filterText.trim()) && (
-          <span className="text-[11px] text-gray-500">{visible.length}/{objects.length} shown</span>
-        )}
       </div>
 
       {loading && !objects.length && !folders.length ? (
@@ -422,7 +444,7 @@ export default function StorageBrowser({ notify }) {
       )}
       {cursor && (
         <button type="button" onClick={() => load(prefix, cursor, true)} disabled={loading} className="btn-secondary w-full">
-          Load more…
+          {loadMoreLabel}
         </button>
       )}
       {viewer && (
