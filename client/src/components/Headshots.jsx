@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { storageList, storageUpload } from '../api';
 import { computeTiles, computeTilesPercent } from '../tiling';
+import R2ImagePicker from './R2ImagePicker';
 
 const PRESETS = [
   { id: '3x3', mode: 'grid', cols: 3, rows: 3, label: '3×3 — 9 headshots (3 rows × 3 cols)' },
@@ -50,6 +51,8 @@ export default function Headshots({ notify }) {
   const [cuts, setCuts] = useState([0.3, 0.5, 0.7]); // 1x4 divider fractions
   const [prefix, setPrefix] = useState('headshot');
   const [busy, setBusy] = useState(false);
+  const [fetchingR2, setFetchingR2] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [progress, setProgress] = useState('');
   const [outputs, setOutputs] = useState([]);
   const qidRef = useRef(0);
@@ -84,6 +87,35 @@ export default function Headshots({ notify }) {
 
   const removeItem = (qid) => setQueue((q) => q.filter((i) => i.qid !== qid));
   const clearDone = () => setQueue((q) => q.filter((i) => i.status !== 'done'));
+
+  // R2 source: download each key to a File, then reuse the local pick() path
+  // (same image/* validation / decode / queue / error handling). Fail-soft
+  // per file so one bad key doesn't drop the rest.
+  const addFromR2 = async (keys) => {
+    setPickerOpen(false);
+    if (!keys?.length) return;
+    setFetchingR2(true);
+    try {
+      const files = [];
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        setProgress(`Fetching from R2 ${i + 1}/${keys.length}…`);
+        try {
+          const res = await fetch(`/api/storage/download?key=${encodeURIComponent(key)}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const base = String(key).split('/').filter(Boolean).pop() || 'r2-image.jpg';
+          files.push(new File([blob], base, { type: blob.type || 'image/jpeg' }));
+        } catch (e) {
+          notify && notify(`R2 fetch failed for ${key}: ${e.message}`, 'error');
+        }
+      }
+      setProgress('');
+      if (files.length) await pick(files);
+    } finally {
+      setFetchingR2(false);
+    }
+  };
 
   const previewAll = () => {
     setQueue((q) => q.map((item) => ({ ...item, thumbs: tilesFor(item).map((t) => thumbUrl(item.img, t)) })));
@@ -143,10 +175,14 @@ export default function Headshots({ notify }) {
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2 items-center">
         <label className="btn-secondary cursor-pointer">
-          Choose sheet images
+          From PC
           <input type="file" accept="image/*" multiple className="hidden" aria-label="Sheet images"
             onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
         </label>
+        <button type="button" onClick={() => setPickerOpen(true)} disabled={fetchingR2}
+          className="btn-secondary" aria-label="Pick sheet images from R2">
+          {fetchingR2 ? 'Fetching from R2…' : 'From R2'}
+        </button>
         {!!queue.length && (
           <span className="text-[11px] text-gray-400">
             {queue.length} file{queue.length > 1 ? 's' : ''} queued · {perFile} tiles each
@@ -241,6 +277,7 @@ export default function Headshots({ notify }) {
           )}
         </>
       )}
+      <R2ImagePicker open={pickerOpen} onClose={() => setPickerOpen(false)} onConfirm={addFromR2} />
     </div>
   );
 }
