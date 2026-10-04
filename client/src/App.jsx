@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { deleteCustomLora, fetchBalances, fetchCustomLoras, fetchEnhancements, fetchHealth, fetchLinks, fetchRuns, fetchStats, rateRun, saveCustomLora } from './api';
+import { deleteCustomLora, fetchBalances, fetchCustomLoras, fetchEnhancements, fetchHealth, fetchLibrary, fetchLinks, fetchRuns, fetchStats, rateRun, saveCustomLora } from './api';
 import CustomLoraLibrary from './components/CustomLoraLibrary';
 import Headshots from './components/Headshots';
 import MaskPainter from './components/MaskPainter';
@@ -61,6 +61,7 @@ export default function App() {
   const [balancesLoading, setBalancesLoading] = useState(false);
   const [balancesNote, setBalancesNote] = useState('');
   const [customLoras, setCustomLoras] = useState([]);
+  const [centralLoras, setCentralLoras] = useState(null);
 
   const loadCustomLoras = useCallback(async () => {
     try {
@@ -150,6 +151,8 @@ export default function App() {
       loadRuns(DEFAULT_FILTERS);
       loadBalances(false);
       loadCustomLoras();
+      // Central library is fail-soft (null on error) — customs view unchanged.
+      fetchLibrary().then(setCentralLoras);
       try {
         setEnhancements(await fetchEnhancements({ limit: 200 }));
       } catch { /* surfaced on manual refresh */ }
@@ -397,9 +400,9 @@ export default function App() {
             : <EnhancementsList items={shownEnh} />}
         </Section>
 
-        <Section id="sec-loras" icon="fa-layer-group" title="LoRA library" defaultOpen={false} summary={customLoras.length ? `${customLoras.length} custom` : 'add from URL'}>
+        <Section id="sec-loras" icon="fa-layer-group" title="LoRA library" defaultOpen={false} summary={centralLoras?.length ? `Library: ${centralLoras.length} central + ${customLoras.length} custom` : (customLoras.length ? `${customLoras.length} custom` : 'add from URL')}>
           <p className="text-[11px] text-gray-500 mb-2">Centralized LoRA management — add from HuggingFace/CivitAI URLs once, use from every generator app. Custom entries appear in each app's pickers under a Custom group.</p>
-          <CustomLoraLibrary loras={customLoras} onAdd={handleAddCustom} onDelete={handleDeleteCustom} notify={toast} />
+          <CustomLoraLibrary loras={customLoras} central={centralLoras} onAdd={handleAddCustom} onDelete={handleDeleteCustom} notify={toast} />
         </Section>
 
         <Section id="sec-headshots" icon="fa-scissors" title="Headshot splitter" defaultOpen={false} summary="3×3 · 3×2 → headshots/">

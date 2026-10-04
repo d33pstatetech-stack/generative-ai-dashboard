@@ -91,6 +91,16 @@ export async function fetchCustomLoras() {
   return (await get('/api/loras/custom')).loras || [];
 }
 
+// Central LoRA library (read-only). Fail-soft → null so the customs view
+// stays untouched when the endpoint is missing/fails (pre-migration DBs).
+export async function fetchLibrary() {
+  try {
+    return (await get('/api/loras/library')).loras || [];
+  } catch {
+    return null;
+  }
+}
+
 export async function saveCustomLora(entry) {
   const res = await fetch(`${API}/api/loras/custom`, {
     method: 'POST',
