@@ -649,12 +649,20 @@ async function handleApiRoute(request, env, path, url) {
     try {
       if (model) {
         const { resolveGuideKey } = await import('./prompt-guides.js');
-        const key = resolveGuideKey(model, family || '');
+        // Pass modality through so a video guide is never looked up for an
+        // image model (or vice versa); those keys don't exist in the table.
+        const mod = modality === 'video' ? 'video' : modality === 'image' ? 'image' : null;
+        const key = resolveGuideKey(model, family || '', mod);
         if (!key) return jsonResponse({ guide: null, reason: 'no guide for model' });
         const { results } = await H.prepare(
           `SELECT ${cols}, syntax_json, length_json, include_json, avoid_json, settings_json, mistakes_json, sources_json FROM prompt_guides WHERE guide_key = ?`
-        ).bind(`${modality || 'image'}/${key}`).all();
-        return jsonResponse({ guide: results && results[0] ? results[0] : null });
+        ).bind(`${mod || 'image'}/${key}`).all();
+        // A key that resolves but has no row means the family documents the
+        // other modality. Say so explicitly rather than returning a bare null.
+        if (!results || !results.length) {
+          return jsonResponse({ guide: null, reason: 'no guide for this model in modality ' + (mod || 'image'), resolved_key: `${mod || 'image'}/${key}` });
+        }
+        return jsonResponse({ guide: results[0] });
       }
       const conds = [], vals = [];
       if (family) { conds.push('model_family = ?'); vals.push(family); }
