@@ -353,6 +353,7 @@ function links(env) {
     { id: 'runpod-tree', title: 'RunPod Volume File Tree (vz9pcezb40)', url: './runpod-tree.html', kind: 'data', desc: 'Styled viewer: overview map, search filter, full listing — 5287 objects' },
     { id: 'runpod-tree-txt', title: 'RunPod Volume Tree (raw .txt)', url: './runpod-tree.txt', kind: 'data', desc: 'Plain-text fallback of the full tree listing' },
     { id: 'modal-billing', title: 'Modal Billing', url: 'https://modal.com/settings/billing', kind: 'billing' },
+    { id: 'prompt-atlas', title: 'Prompt Atlas', url: './prompt-atlas.html', kind: 'app', desc: 'Model-by-model prompting guides: syntax, ideal length, structure, good-vs-bad pairs' },
   ];
 }
 

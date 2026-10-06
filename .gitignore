@@ -9,3 +9,4 @@ client/node_modules/
 *.pem
 *.key
 dist/
+ENHANCER-FINETUNE-PLAN.local.md

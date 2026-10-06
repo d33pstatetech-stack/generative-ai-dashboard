@@ -253,6 +253,7 @@ export default function App() {
     { id: 'muapi', title: 'MuAPI', url: 'https://muapi-prompt-generator.d33pstatetech.workers.dev' },
     { id: 'replicate', title: 'Replicate', url: 'https://replicate-prompt-orchestrator.d33pstatetech.workers.dev' },
     { id: 'wavespeed', title: 'WaveSpeed', url: 'https://wavespeed-prompt-generator.d33pstatetech.workers.dev' },
+    { id: 'prompt-atlas', title: 'Prompt Atlas', url: './prompt-atlas.html' },
   ];
   const headerApps = apps.length ? apps : fallbackApps;
   const money = (v) => (v == null || !isFinite(Number(v)) ? '—' : `$${Number(v).toFixed(2)}`);
