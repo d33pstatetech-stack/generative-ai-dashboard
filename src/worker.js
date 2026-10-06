@@ -22,7 +22,7 @@
  */
 
 const PROTECTED_API_PREFIXES = ['/api/balance', '/api/storage', '/api/links', '/api/config',
-'/api/history', '/api/lora'];
+'/api/history', '/api/lora', '/api/guides'];
 const PROVIDERS = ['muapi', 'wavespeed', 'runpod', 'replicate', 'modal'];
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -634,6 +634,35 @@ async function handleApiRoute(request, env, path, url) {
         `SELECT id, source_app, kind, substr(raw_prompt, 1, 2000) AS raw_prompt, substr(enhanced_prompt, 1, 6000) AS enhanced_prompt, target_provider, target_model, llm_provider, llm_model, template_version, created_at FROM enhancements WHERE ${conds.join(' AND ')} ORDER BY created_at DESC LIMIT ?`
       ).bind(...vals, limit).all();
       return jsonResponse({ enhancements: results || [], total: results ? results.length : 0 });
+    } catch (e) { return jsonResponse({ error: e.message }, 500); }
+  }
+  // ─── GET /api/guides — Prompt Atlas conventions, optionally resolved ───
+  // ?family=&modality=  list guides.  ?model=<id>&family=<fam>  resolve one.
+  // Tolerates a missing table (pre-migration) by returning an empty list.
+  if (path === '/api/guides' && request.method === 'GET') {
+    const H = histDB(env);
+    if (!H) return jsonResponse({ error: 'HISTORY not configured' }, 500);
+    const family = url.searchParams.get('family');
+    const modality = url.searchParams.get('modality');
+    const model = url.searchParams.get('model');
+    const cols = `guide_key, group_id, model_family, model_label, version_label, tab_index, modality, title, source_file, pairs, principle_md, structure_md, enhancer_md, summary_md`;
+    try {
+      if (model) {
+        const { resolveGuideKey } = await import('./prompt-guides.js');
+        const key = resolveGuideKey(model, family || '');
+        if (!key) return jsonResponse({ guide: null, reason: 'no guide for model' });
+        const { results } = await H.prepare(
+          `SELECT ${cols}, syntax_json, length_json, include_json, avoid_json, settings_json, mistakes_json, sources_json FROM prompt_guides WHERE guide_key = ?`
+        ).bind(`${modality || 'image'}/${key}`).all();
+        return jsonResponse({ guide: results && results[0] ? results[0] : null });
+      }
+      const conds = [], vals = [];
+      if (family) { conds.push('model_family = ?'); vals.push(family); }
+      if (modality) { conds.push('modality = ?'); vals.push(modality); }
+      const { results } = await H.prepare(
+        `SELECT ${cols} FROM prompt_guides ${conds.length ? 'WHERE ' + conds.join(' AND ') : ''} ORDER BY group_id, model_family, tab_index`
+      ).bind(...vals).all();
+      return jsonResponse({ guides: results || [], total: results ? results.length : 0 });
     } catch (e) { return jsonResponse({ error: e.message }, 500); }
   }
   if (path === '/api/history/stats' && request.method === 'GET') {
