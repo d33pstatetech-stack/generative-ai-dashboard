@@ -51,8 +51,13 @@ error and asserts the guide path and the `MODEL_PRESETS` fallback path are
 mutually exclusive — run it after any change to `buildEnhancerSystemPrompt`:
 
 ```powershell
-cd <app>; node scripts/test-enhancer-prompt.mjs
+cd <app>; node scripts/test-enhancer-prompt.mjs src/worker.js
 ```
+
+The worker path argument is **required**: the harness slices the functions out
+of the shipped `src/worker.js` and evaluates them, and it exits `2` with a
+usage line if the argument is missing. The bare form is a usage error, not a
+pass.
 
 ## Fastest backout — kill switch
 
@@ -187,7 +192,7 @@ The endpoint needs an authenticated session; unauthenticated `curl` gets a
 ```powershell
 npx wrangler deployments list | Select-Object -First 5   # new version active
 cd client; npm run build                                # client still builds
-cd <app>; node scripts/test-enhancer-prompt.mjs          # if the test still exists
+cd <app>; node scripts/test-enhancer-prompt.mjs src/worker.js   # if the test still exists
 ```
 
 Then in the browser: enhance a prompt on a model that has a guide
@@ -200,10 +205,15 @@ shows an injection commit.
 
 - `npm run build` in `client/`
 - resolver audit passes: no model resolves to a `guide_key` absent from
-  `prompt_guides` (see `scripts/audit-guide-mapping.mjs`)
+  `prompt_guides` — `audit-guide-mapping.mjs` needs a models.json, so produce
+  one first (its output is UTF-16LE with a BOM; pass the raw file):
+  ```powershell
+  npx wrangler d1 execute replicate-orchestrator --remote --json --command "SELECT id, family, group_of FROM models" > models.json
+  node scripts/audit-guide-mapping.mjs models.json
+  ```
 - unguided models still hit `MODEL_PRESETS`
-- `node scripts/test-enhancer-prompt.mjs` (three generator apps) — the guard
-  against the `guide is not defined` regression
+- `node scripts/test-enhancer-prompt.mjs src/worker.js` (three generator apps) —
+  the guard against the `guide is not defined` regression
 
 Note: `npx tsc --noEmit` is **not** a gate for the Dashboard — its `client/`
 is plain JS/JSX with no `typescript` dependency and no `tsconfig.json`, so
