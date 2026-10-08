@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { deleteCustomLora, fetchBalances, fetchCustomLoras, fetchEnhancements, fetchHealth, fetchLibrary, fetchLinks, fetchRuns, fetchStats, rateRun, renameCustomLora, saveCustomLora } from './api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { deleteCustomLora, deleteRun, fetchBalances, fetchCustomLoras, fetchEnhancements, fetchHealth, fetchLibrary, fetchLinks, fetchRuns, fetchStats, rateRun, renameCustomLora, saveCustomLora } from './api';
 import CustomLoraLibrary from './components/CustomLoraLibrary';
 import Headshots from './components/Headshots';
 import MaskPainter from './components/MaskPainter';
@@ -50,6 +50,8 @@ export default function App() {
   const [runsLoading, setRunsLoading] = useState(false);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [ratingBusyId, setRatingBusyId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const deletingRef = useRef(null); // guards the gap before `disabled` re-renders
   const [enhancements, setEnhancements] = useState([]);
   const [enhLoading, setEnhLoading] = useState(false);
   const [enhModel, setEnhModel] = useState('');
@@ -226,6 +228,37 @@ export default function App() {
       toast(`Rate failed: ${e.message}`, 'error');
     } finally {
       setRatingBusyId(null);
+    }
+  }, [toast, loadStats]);
+
+  // Delete a bad run outright: the DB row goes, plus the archived R2 copies it
+  // named (best-effort server-side). Confirm first, drop it from the feed on
+  // success, and surface R2 leftovers instead of pretending storage was freed.
+  // Resolves true on success so RunsTable can close an open viewer for it.
+  const handleDeleteRun = useCallback(async (id, model) => {
+    if (deletingRef.current != null) return false; // in-flight delete: ignore the re-click
+    if (!window.confirm(`Delete run #${id}${model ? ` (${model})` : ''}? Its saved copies go too.`)) return false;
+    deletingRef.current = id;
+    setDeletingId(id);
+    try {
+      const res = await deleteRun(id);
+      setRuns((rs) => rs.filter((r) => r.id !== id));
+      const left = (res && res.r2Errors) || [];
+      const freed = `${res.r2Deleted || 0} archived object(s) removed`;
+      toast(
+        left.length
+          ? `Deleted run #${id} - ${freed}, but ${left.length} still in storage: ${left.join('; ')}`
+          : `Deleted run #${id} - ${freed}`,
+        left.length ? 'info' : 'success',
+      );
+      loadStats();
+      return true;
+    } catch (e) {
+      toast(`Delete failed: ${e.message}`, 'error');
+      return false;
+    } finally {
+      deletingRef.current = null;
+      setDeletingId(null);
     }
   }, [toast, loadStats]);
 
@@ -488,7 +521,7 @@ export default function App() {
           </div>
           {runsLoading
             ? <p className="text-xs text-gray-500 flex items-center gap-2"><span className="spinner !border-gray-600"></span>Loading runs…</p>
-            : <RunsTable runs={runs} onRate={handleRate} ratingBusyId={ratingBusyId} notify={toast} />}
+            : <RunsTable runs={runs} onRate={handleRate} ratingBusyId={ratingBusyId} onDelete={handleDeleteRun} deletingId={deletingId} notify={toast} />}
         </Section>
       </main>
 

@@ -39,13 +39,19 @@ function resolveAllMedia(run) {
 }
 
 // Mobile-first runs history: stacked cards on small screens, table on md+.
-// Rating/confirm errors surface via the notify toast (App-owned); this table
+// Rating/delete errors surface via the notify toast (App-owned); this table
 // keeps its inline empty-states as before (additive only, no logic removed).
-export default function RunsTable({ runs, onRate, ratingBusyId, notify }) {
+export default function RunsTable({ runs, onRate, ratingBusyId, onDelete, deletingId, notify }) {
   void notify;
   const [viewer, setViewer] = useState(null); // { items: [{ media, run }], index } | null
   const openViewer = (r, media, i) =>
     setViewer({ items: media.map((m) => ({ media: m, run: r })), index: i });
+  // Deleting the run the viewer is showing leaves it pointing at a row that no
+  // longer exists (and, once the R2 copies go, at media that 404s), so close it.
+  const removeRun = async (r) => {
+    const done = await onDelete(r.id, r.model);
+    if (done) setViewer((v) => (v && v.items[v.index].run.id === r.id ? null : v));
+  };
   if (!runs.length) return <p className="text-xs text-gray-600 py-8 text-center">No runs match these filters.</p>;
   return (
     <div className="space-y-3">
@@ -97,8 +103,15 @@ export default function RunsTable({ runs, onRate, ratingBusyId, notify }) {
               {String(promptOf(r)).slice(0, 500)}
             </p>
             <div className="mt-1 flex items-center gap-1">
-              <Stars value={r.rating} runId={r.id} onRate={onRate} disabled={ratingBusyId === r.id} />
+              <Stars value={r.rating} runId={r.id} onRate={onRate} disabled={ratingBusyId === r.id || deletingId === r.id} />
               {ratingBusyId === r.id && <span className="spinner !border-gray-600 ml-1"></span>}
+              {onDelete && (
+                <button type="button" onClick={() => removeRun(r)} disabled={deletingId === r.id}
+                  className="ml-auto text-[10px] text-gray-500 hover:text-red-400 underline disabled:opacity-60 disabled:no-underline"
+                  title={`Delete run #${r.id} and its archived copies`}>
+                  {deletingId === r.id ? 'Deleting...' : 'Delete'}
+                </button>
+              )}
             </div>
           </article>
         );

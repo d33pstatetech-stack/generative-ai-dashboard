@@ -119,6 +119,17 @@ export async function deleteCustomLora(id) {
   return data;
 }
 
+// Drop one bad run. The server also best-effort deletes the archived R2
+// objects named in the row's r2_keys_json and reports what it managed, so
+// callers can surface leftovers instead of silently leaking storage.
+// Resolves to { ok, id, r2Deleted, r2Errors }.
+export async function deleteRun(id) {
+  const res = await fetch(`${API}/api/history/runs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const data = await json(res);
+  if (!res.ok) throw new Error(errText(data.error, `Delete failed (${res.status})`));
+  return data;
+}
+
 // Rename a custom LoRA. Display-only field — repo/file stay put, so the
 // UNIQUE(source, repo, file) identity is untouched.
 export async function renameCustomLora(id, name) {
