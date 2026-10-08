@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import AddLoraUrl from './AddLoraUrl';
 
 // Centralized LoRA library: add-from-URL + full custom list (Aznten / Misc / NSFW).
 // Same name-pattern rule as the generator apps: aznten / asian-ten / d33pstate
 // variants are yours regardless of source; the rest (non-NSFW) is Misc.
-// Props: loras, central (fail-soft null), onAdd(entry), onDelete(id, name), notify.
+// Props: loras, central (fail-soft null), onAdd(entry), onDelete(id, name),
+// onRename(id, name), notify.
 const AZNTEN_RE = /aznten|asian[- ]ten|d33pstate/i;
+const NAME_MAX = 200;
 
 // Central rows carry group_name (aznten|misc|nsfw); fall back to the same
 // AZNTEN_RE rule when group_name is absent (older seeds / unexpected values).
@@ -15,7 +18,10 @@ function centralGroup(l) {
   return AZNTEN_RE.test(`${l.name || ''} ${l.id || ''}`) ? 'aznten' : 'misc';
 }
 
-export default function CustomLoraLibrary({ loras, central, onAdd, onDelete, notify }) {
+export default function CustomLoraLibrary({ loras, central, onAdd, onDelete, onRename, notify }) {
+  const [editId, setEditId] = useState(null);
+  const [editName, setEditName] = useState('');
+
   const list = Array.isArray(loras) ? loras : [];
   const sfw = list.filter((l) => !l.nsfw);
   const aznten = sfw.filter((l) => AZNTEN_RE.test(`${l.name || ''} ${l.id || ''}`));
@@ -81,27 +87,95 @@ export default function CustomLoraLibrary({ loras, central, onAdd, onDelete, not
     );
   };
 
-  const card = (l) => (
-    <div key={l.id} className="p-2 rounded-lg bg-gray-800/50 border border-gray-700">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-semibold text-gray-200 truncate" title={l.name}>{l.name}</div>
-          <div className="text-[10px] text-gray-500 truncate" title={`${l.repo_url || ''} · ${l.file || ''}`}>
-            {l.source} · {l.repo} · {l.file}
+  const startRename = (l) => {
+    setEditId(l.customId);
+    setEditName(l.name || '');
+  };
+
+  const cancelRename = () => {
+    setEditId(null);
+    setEditName('');
+  };
+
+  const saveRename = async (l) => {
+    const name = editName.trim();
+    if (!name) {
+      notify && notify('Name cannot be empty', 'error');
+      return;
+    }
+    if (name.length > NAME_MAX) {
+      notify && notify(`Name must be ${NAME_MAX} characters or fewer`, 'error');
+      return;
+    }
+    if (name === (l.name || '')) {
+      cancelRename();
+      return;
+    }
+    if (!onRename) {
+      notify && notify('Rename unavailable', 'error');
+      return;
+    }
+    // onRename owns the error reporting (it toasts on failure), so this only
+    // has to leave edit mode either way.
+    await onRename(l.customId, name);
+    cancelRename();
+  };
+
+  const card = (l) => {
+    const editing = editId === l.customId;
+    return (
+      <div key={l.id} className="p-2 rounded-lg bg-gray-800/50 border border-gray-700">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            {editing ? (
+              <div className="flex items-center gap-1">
+                <input
+                  value={editName}
+                  autoFocus
+                  maxLength={NAME_MAX}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveRename(l);
+                    if (e.key === 'Escape') cancelRename();
+                  }}
+                  className="min-w-0 flex-1 bg-gray-900 border border-sky-700 rounded px-1 py-px text-xs text-gray-100"
+                  aria-label="LoRA name"
+                />
+                <button type="button" onClick={() => saveRename(l)}
+                  className="text-[10px] text-sky-300 hover:text-sky-100 underline flex-none">Save</button>
+                <button type="button" onClick={cancelRename}
+                  className="text-[10px] text-gray-500 hover:text-gray-300 underline flex-none">Cancel</button>
+              </div>
+            ) : (
+              <div className="text-xs font-semibold text-gray-200 truncate" title={l.name}>{l.name}</div>
+            )}
+            <div className="text-[10px] text-gray-500 truncate" title={`${l.repo_url || ''} · ${l.file || ''}`}>
+              {l.source} · {l.repo} · {l.file}
+            </div>
+            <div className="text-[10px] text-gray-500 mt-0.5">
+              base: <span className="text-gray-300">{l.base_model || 'unknown'}</span>
+              {' · '}{(l.triggers || []).length ? `triggers: ${(l.triggers || []).join(', ')}` : 'no triggers found'}
+            </div>
+            {l.note && <div className="text-[10px] text-gray-500 mt-0.5" title={l.note}>{l.note}</div>}
           </div>
-          <div className="text-[10px] text-gray-500 mt-0.5">
-            base: <span className="text-gray-300">{l.base_model || 'unknown'}</span>
-            {' · '}{(l.triggers || []).length ? `triggers: ${(l.triggers || []).join(', ')}` : 'no triggers found'}
+          <div className="flex flex-col items-end gap-0.5 flex-none">
+            {!editing && (
+              <button type="button" onClick={() => startRename(l)}
+                title="Rename this custom LoRA" className="text-[10px] text-gray-500 hover:text-sky-300 underline">
+                Rename
+              </button>
+            )}
+            {!editing && (
+              <button type="button" onClick={() => onDelete && onDelete(l.customId, l.name)}
+                title="Remove this custom LoRA" className="text-[10px] text-gray-500 hover:text-red-400 underline">
+                Remove
+              </button>
+            )}
           </div>
-          {l.note && <div className="text-[10px] text-gray-500 mt-0.5" title={l.note}>{l.note}</div>}
         </div>
-        <button type="button" onClick={() => onDelete && onDelete(l.customId, l.name)}
-          title="Remove this custom LoRA" className="text-[10px] text-gray-500 hover:text-red-400 underline flex-none">
-          Remove
-        </button>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-2">

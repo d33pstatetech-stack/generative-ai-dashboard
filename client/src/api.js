@@ -119,6 +119,19 @@ export async function deleteCustomLora(id) {
   return data;
 }
 
+// Rename a custom LoRA. Display-only field — repo/file stay put, so the
+// UNIQUE(source, repo, file) identity is untouched.
+export async function renameCustomLora(id, name) {
+  const res = await fetch(`${API}/api/loras/custom/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const data = await json(res);
+  if (!res.ok) throw new Error(errText(data.error, `Rename failed (${res.status})`));
+  return data;
+}
+
 // R2 storage browser primitives (headshots tool + power users).
 export async function storageUpload(key, blob, contentType) {
   const res = await fetch(`${API}/api/storage/upload?key=${encodeURIComponent(key)}`, {

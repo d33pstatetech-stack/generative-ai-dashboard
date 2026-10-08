@@ -435,6 +435,32 @@ async function handleApiRoute(request, env, path, url) {
     }
   }
 
+  // ─── PATCH /api/loras/custom/:id — rename a custom LoRA ───
+  // Name is display-only: UNIQUE(source, repo, file) stays the identity, so
+  // nothing downstream (repo/file/file_url) moves and no child row orphans.
+  {
+    const m3 = path.match(/^\/api\/loras\/custom\/(\d+)$/);
+    if (m3 && request.method === 'PATCH') {
+      const hdb = histDB(env);
+      if (!hdb) return jsonResponse({ error: 'history DB not bound' }, 500);
+      await ensureCustomLoras(hdb);
+      const id = Number(m3[1]);
+      let body;
+      try { body = await request.json(); } catch { return jsonResponse({ error: 'Invalid JSON' }, 400); }
+      const name = String(body.name || '').trim();
+      if (!name) return jsonResponse({ error: 'name is required' }, 400);
+      if (name.length > 200) return jsonResponse({ error: 'name must be 200 characters or fewer' }, 400);
+      try {
+        const r = await hdb.prepare('UPDATE custom_loras SET name = ? WHERE id = ?').bind(name, id).run();
+        if ((r.meta.changes || 0) === 0) return jsonResponse({ error: 'custom LoRA not found' }, 404);
+        const row = await hdb.prepare('SELECT * FROM custom_loras WHERE id = ?').bind(id).first();
+        return jsonResponse({ ok: true, lora: row ? customLoraToEntry(row) : null });
+      } catch (e) {
+        return jsonResponse({ error: 'DB error: ' + String((e && e.message) || e).slice(0, 200) }, 500);
+      }
+    }
+  }
+
   // ─── GET /api/loras/library — central LoRA repository (shared HISTORY table) ───
   // Phase A read-only. Pre-migration DBs without the table get {loras:[]} (200, never 500).
   if (path === '/api/loras/library' && request.method === 'GET') {
@@ -716,7 +742,7 @@ export default {
     const path = url.pathname;
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cf-Access-Jwt-Assertion',
     };
     if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { deleteCustomLora, fetchBalances, fetchCustomLoras, fetchEnhancements, fetchHealth, fetchLibrary, fetchLinks, fetchRuns, fetchStats, rateRun, saveCustomLora } from './api';
+import { deleteCustomLora, fetchBalances, fetchCustomLoras, fetchEnhancements, fetchHealth, fetchLibrary, fetchLinks, fetchRuns, fetchStats, rateRun, renameCustomLora, saveCustomLora } from './api';
 import CustomLoraLibrary from './components/CustomLoraLibrary';
 import Headshots from './components/Headshots';
 import MaskPainter from './components/MaskPainter';
@@ -86,6 +86,16 @@ export default function App() {
       toast('Custom LoRA removed', 'success');
     } catch (e) {
       toast(`Remove failed: ${e.message}`, 'error');
+    }
+  }, [toast, loadCustomLoras]);
+
+  const handleRenameCustom = useCallback(async (id, name) => {
+    try {
+      await renameCustomLora(id, name);
+      await loadCustomLoras();
+      toast(`Renamed to "${name}"`, 'success');
+    } catch (e) {
+      toast(`Rename failed: ${e.message}`, 'error');
     }
   }, [toast, loadCustomLoras]);
 
@@ -403,7 +413,7 @@ export default function App() {
 
         <Section id="sec-loras" icon="fa-layer-group" title="LoRA library" defaultOpen={false} summary={centralLoras?.length ? `Library: ${centralLoras.length} central + ${customLoras.length} custom` : (customLoras.length ? `${customLoras.length} custom` : 'add from URL')}>
           <p className="text-[11px] text-gray-500 mb-2">Centralized LoRA management — add from HuggingFace/CivitAI URLs once, use from every generator app. Custom entries appear in each app's pickers under a Custom group.</p>
-          <CustomLoraLibrary loras={customLoras} central={centralLoras} onAdd={handleAddCustom} onDelete={handleDeleteCustom} notify={toast} />
+          <CustomLoraLibrary loras={customLoras} central={centralLoras} onAdd={handleAddCustom} onDelete={handleDeleteCustom} onRename={handleRenameCustom} notify={toast} />
         </Section>
 
         <Section id="sec-headshots" icon="fa-scissors" title="Headshot splitter" defaultOpen={false} summary="3×3 · 3×2 → headshots/">
