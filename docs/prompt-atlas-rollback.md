@@ -16,11 +16,17 @@ the injection commits still applies cleanly — except in Replicate, see
 
 | App | Injection tip | Deployed version | Repo HEAD at last check |
 |---|---|---|---|
-| Dashboard (`/api/guides`, resolver — **no injection**) | `2239e3c` | `39817105` | `2239e3c` (same) |
-| MuAPI | `5592781` | `88ae79c6` | `76b770d` (ahead: LoRA matching, UI) |
-| Replicate | `51226eb` | `960c761b` | `250e331` (ahead: catalogue, LoRA matching, UI) |
-| WaveSpeed | `3e31779` | `9711a90e` | `d372eac` (ahead: catalogue, LoRA matching, UI) |
+| Dashboard (`/api/guides`, resolver — **no injection**) | `2239e3c` | `42e3c530-1e89-402f-ba8a-1cca9ca8c97b` | `2de5e12` |
+| MuAPI | `5592781` | `8d5c3455-3a2d-4c67-b44e-0e9b621caf44` | `269b616` |
+| Replicate | `51226eb` | `3a08acaa-8781-46d2-9e5d-968675c9dcf3` | `a2c34f9` |
+| WaveSpeed | `3e31779` | `846c970a-c15a-4df9-91db-ec7d9d4f1cbb` | `f3dd349` |
 | D1 migration + seed | `44dc2f2` (Dashboard) | — | — |
+
+Branches at the push that produced the versions above: Dashboard `ux-overhaul`
+(`origin/ux-overhaul`), the three generator apps `feat/redesign-ui`.
+Re-confirm each against `npx wrangler deployments list` before an incident —
+the version IDs are point-in-time, as the Dashboard's lack of a configured
+upstream for `ux-overhaul` already shows.
 
 `5592781` / `51226eb` / `3e31779` are the `guide is not defined` fixes and are
 part of the known-good state. Do **not** revert them while keeping the feature.
@@ -191,6 +197,7 @@ The endpoint needs an authenticated session; unauthenticated `curl` gets a
 
 ```powershell
 npx wrangler deployments list | Select-Object -First 5   # new version active
+Copy-Item src\worker.js $env:TEMP\worker-check.mjs; node --check $env:TEMP\worker-check.mjs; Remove-Item $env:TEMP\worker-check.mjs   # loads as ESM
 cd client; npm run build                                # client still builds
 cd <app>; node scripts/test-enhancer-prompt.mjs src/worker.js   # if the test still exists
 ```
@@ -203,6 +210,20 @@ shows an injection commit.
 
 ## Pre-deploy checklist
 
+- **Parse the Worker as ESM, every time.** These files use `export default`,
+  so `node --check` on a `.js` copy is a *false* pass — it reports "syntax OK"
+  for a module it is not allowed to parse. Copy to `.mjs` first:
+
+  ```powershell
+  Copy-Item src\worker.js src\worker.esm-check.mjs
+  node --check src\worker.esm-check.mjs
+  Remove-Item src\worker.esm-check.mjs
+  ```
+
+  This is not theoretical: a stray `}` shipped in WaveSpeed's `src/worker.js`
+  in this batch that `node --check` passed outright and that would have made
+  the module unloadable. Do not rely on the `.js` form, and do not commit the
+  `.mjs` copy.
 - `npm run build` in `client/`
 - resolver audit passes: no model resolves to a `guide_key` absent from
   `prompt_guides` — `audit-guide-mapping.mjs` needs a models.json, so produce
@@ -243,8 +264,41 @@ Last verified: all four Workers deployed; `prompt_guides` holds **38** rows
 (D1 `genai-history`, confirmed by SELECT), `guide_import_meta` holds 1 row;
 resolver audit reports 0 broken lookups. Deployed versions as tabled above.
 
+Post-batch state that was applied to D1 alongside the code, so a backout should
+assume it unless it has also been undone:
+
+- `llm_config` in `muapi-models` and `replicate-orchestrator` has the Experiallabs
+  provider **prepended** (idempotent `json_group_array` rebuild, `apiKey` empty,
+  key resolved from the `EXPLABS_API_KEY` Worker secret). WaveSpeed's
+  `llm_config` is empty and therefore unaffected. This rebuild is idempotent —
+  re-running it changes nothing — but it is not reversible by checkout; restoring
+  an older row means re-inserting the previous JSON.
+- `custom_loras` rows 7, 8 and 9 in `genai-history` renamed to
+  `aznten_flux2-klein-9b_runcomfy_3400` / `_3250` / `_3000`.
+
+### Evaluator round 2 — one real finding, fixed
+
+Comparing the three `lora-compat.js` implementations line by line showed muapi
+never installed central `lora_verifications` into `compatibility()`, so a pair
+a person actually ran reached green on replicate and wavespeed and stayed amber
+here. Pre-existing, not caused by the batch. Fixed in `58b50f6` and `269b616`,
+which also scopes the install to `app === 'muapi'` rows — an unfiltered install
+would turn a pair verified on *replicate* green on *muapi*, since
+`lora_verifications` is shared and `model_id` is only meaningful inside the app
+that produced it. Proof: 49 assertions across all three repos plus the K4/K5/K6
+K7 suites.
+
 **Needs a second look:** the deployed-version column is a point-in-time
-record. Three repos have taken commits since those deploys, so before relying
-on this table during an incident, confirm what is actually live with
-`npx wrangler deployments list` per app rather than assuming the listed
-version is still current.
+record. Confirm what is actually live with `npx wrangler deployments list`
+per app rather than assuming the listed version is still current.
+
+**One caveat on live verification from this workstation:** `*.workers.dev` **is**
+reachable here — the correct hostnames carry the account subdomain, e.g.
+`https://muapi-prompt-generator.d33pstatetech.workers.dev`. A bare
+`.workers.dev` URL is not, which is what made this look unreachable earlier.
+What is still blocked is *authenticated* testing: all four sit behind Cloudflare
+Access and return 302 to `falling-wildflower-e6e1.cloudflareaccess.com`, with
+`service_token_status: false` and no `CF_ACCESS_CLIENT_ID`/`SECRET` anywhere in
+the repos or the shell environment. The workers are up and routing, but no
+endpoint could be exercised with credentials. Treat the browser click-through
+as still outstanding.
