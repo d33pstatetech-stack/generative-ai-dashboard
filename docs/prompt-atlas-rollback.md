@@ -16,10 +16,10 @@ the injection commits still applies cleanly — except in Replicate, see
 
 | App | Injection tip | Deployed version | Repo HEAD at last check |
 |---|---|---|---|
-| Dashboard (`/api/guides`, resolver — **no injection**) | `2239e3c` | `42e3c530-1e89-402f-ba8a-1cca9ca8c97b` | `2de5e12` |
-| MuAPI | `5592781` | `8d5c3455-3a2d-4c67-b44e-0e9b621caf44` | `269b616` |
-| Replicate | `51226eb` | `3a08acaa-8781-46d2-9e5d-968675c9dcf3` | `a2c34f9` |
-| WaveSpeed | `3e31779` | `846c970a-c15a-4df9-91db-ec7d9d4f1cbb` | `f3dd349` |
+| Dashboard (`/api/guides`, resolver — **no injection**) | `2239e3c` | `42e3c530-1e89-402f-ba8a-1cca9ca8c97b` | `2de5e12` (table refreshed in a later doc-only commit) |
+| MuAPI | `5592781` | `8d5c3455-3a2d-4c67-b44e-0e9b621caf44` | `200f066` |
+| Replicate | `51226eb` | `3a08acaa-8781-46d2-9e5d-968675c9dcf3` | `35d9e4e` |
+| WaveSpeed | `3e31779` | `ac6a695f-79bb-4855-93e4-c2b833043b4f` | `2fa638d` |
 | D1 migration + seed | `44dc2f2` (Dashboard) | — | — |
 
 Branches at the push that produced the versions above: Dashboard `ux-overhaul`
@@ -287,6 +287,19 @@ would turn a pair verified on *replicate* green on *muapi*, since
 `lora_verifications` is shared and `model_id` is only meaningful inside the app
 that produced it. Proof: 49 assertions across all three repos plus the K4/K5/K6
 K7 suites.
+
+### Round 3 — hygiene pass, one behavior change
+
+- MuAPI `200f066`: comment/indentation cleanup around the round-2 port.
+  Non-behavioral, not redeployed.
+- Replicate `35d9e4e`: the auth-prefix comment wrongly claimed
+  `'/api/loras/custom'.startsWith('/api/lora')` is false (it is true), which
+  would have sent a future reader "fixing" the redundancy straight into an
+  auth hole. Comment-only, not redeployed.
+- WaveSpeed `2fa638d` + redeploy `ac6a695f`: `/api/estimate` added to the
+  worker auth gate (muapi already had it; the endpoint is public catalog
+  math, but there is no reason to leave it outside the gate), and the dead
+  `getCentralVerified` client export removed.
 
 **Needs a second look:** the deployed-version column is a point-in-time
 record. Confirm what is actually live with `npx wrangler deployments list`
